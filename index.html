@@ -1409,12 +1409,12 @@
     // where height:auto on <canvas> doesn't honour the intrinsic 800:450 ratio)
     const wrap = document.getElementById('wrap');
     function fixCanvasHeight() {
-      const portrait = window.innerHeight > window.innerWidth && 'ontouchstart' in window;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const portrait = vh > vw && 'ontouchstart' in window;
       if (portrait) {
         // Rotate the entire game area so it appears landscape on portrait phones
-        // maxW = the largest game width that fits once rotated into portrait viewport
-        const maxW = Math.min(window.innerHeight, window.innerWidth * 16 / 9);
-        const gameH = Math.round(maxW * 9 / 16);
+        const maxW = Math.min(vh, vw * 16 / 9);
         wrap.style.position = 'fixed';
         wrap.style.left = '50%';
         wrap.style.top = '50%';
@@ -1422,20 +1422,30 @@
         wrap.style.width = Math.floor(maxW) + 'px';
         wrap.style.transform = 'translate(-50%, -50%) rotate(-90deg)';
         canvas.style.width = '100%';
-        canvas.style.height = gameH + 'px';
+        canvas.style.height = Math.round(maxW * 9 / 16) + 'px';
       } else {
+        // Use window.innerWidth directly — avoids stale canvas.offsetWidth after rotation
+        const w = Math.min(vw, 800);
         wrap.style.position = '';
         wrap.style.left = '';
         wrap.style.top = '';
         wrap.style.maxWidth = '800px';
         wrap.style.width = '';
         wrap.style.transform = '';
-        canvas.style.width = '100%';
-        canvas.style.height = Math.round(canvas.offsetWidth * 9 / 16) + 'px';
+        canvas.style.width = w + 'px';
+        canvas.style.height = Math.round(w * 9 / 16) + 'px';
       }
     }
     window.addEventListener('resize', fixCanvasHeight);
-    window.addEventListener('orientationchange', function () { setTimeout(fixCanvasHeight, 200); });
+    // Fire twice on orientationchange: once early, once after iOS fully settles
+    window.addEventListener('orientationchange', function () {
+      setTimeout(fixCanvasHeight, 100);
+      setTimeout(fixCanvasHeight, 400);
+    });
+    // visualViewport fires after the viewport truly updates — most reliable on iOS
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', fixCanvasHeight);
+    }
     fixCanvasHeight();
     initClouds();
     loop();
