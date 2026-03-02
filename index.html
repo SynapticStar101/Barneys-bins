@@ -1409,12 +1409,17 @@
     // where height:auto on <canvas> doesn't honour the intrinsic 800:450 ratio)
     const wrap = document.getElementById('wrap');
     function fixCanvasHeight() {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
+      // Use visualViewport when available — gives the true visible area on Android/iOS
+      const vp = window.visualViewport;
+      const vw = vp ? vp.width  : window.innerWidth;
+      const vh = vp ? vp.height : window.innerHeight;
       const portrait = vh > vw && 'ontouchstart' in window;
       if (portrait) {
-        // Rotate the entire game area so it appears landscape on portrait phones
-        const maxW = Math.min(vh, vw * 16 / 9);
+        // Portrait phone: rotate wrap -90deg so game appears landscape
+        // maxW is the largest game width that fits once rotated into the portrait viewport:
+        //   visual width after rotation = maxW * 9/16, must fit within vw
+        //   visual height after rotation = maxW, must fit within vh
+        const maxW = Math.min(vh, Math.floor(vw * 16 / 9));
         wrap.style.position = 'fixed';
         wrap.style.left = '50%';
         wrap.style.top = '50%';
@@ -1423,17 +1428,22 @@
         wrap.style.transform = 'translate(-50%, -50%) rotate(-90deg)';
         canvas.style.width = '100%';
         canvas.style.height = Math.round(maxW * 9 / 16) + 'px';
+        canvas.style.margin = '';
       } else {
-        // Use window.innerWidth directly — avoids stale canvas.offsetWidth after rotation
-        const w = Math.min(vw, 800);
-        wrap.style.position = '';
-        wrap.style.left = '';
-        wrap.style.top = '';
-        wrap.style.maxWidth = '800px';
-        wrap.style.width = '';
+        // Landscape: constrain by BOTH width and height so all lanes stay visible.
+        // On phones like Pixel 7 Pro, vh (~412px) is the tight limit, not vw.
+        const maxByWidth  = Math.min(vw, 800);
+        const maxByHeight = Math.floor(vh * 16 / 9); // widest canvas that keeps height <= vh
+        const w = Math.min(maxByWidth, maxByHeight);
+        wrap.style.position  = '';
+        wrap.style.left      = '';
+        wrap.style.top       = '';
+        wrap.style.maxWidth  = '800px';
+        wrap.style.width     = '';
         wrap.style.transform = '';
-        canvas.style.width = w + 'px';
-        canvas.style.height = Math.round(w * 9 / 16) + 'px';
+        canvas.style.width   = w + 'px';
+        canvas.style.height  = Math.round(w * 9 / 16) + 'px';
+        canvas.style.margin  = '0 auto'; // centre canvas when narrower than wrap
       }
     }
     window.addEventListener('resize', fixCanvasHeight);
