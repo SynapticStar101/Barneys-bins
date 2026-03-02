@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="Barney's Bins — The Rubbish Run! A retro arcade game. Drive Barney's bin lorry, collect wheelie bins and dodge obstacles.">
+<title>Barney's Bins — The Rubbish Run!</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { height: -webkit-fill-available; }
+body {
+  background: #0d0d1a;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  font-family: 'Courier New', monospace;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  touch-action: none;
+}
+#wrap { position: relative; width: 100%; max-width: 800px; }
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 4px solid #FFD700;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+canvas:focus { outline: 3px solid #FFD700; outline-offset: 2px; }
+#controls {
+  color: #aaa; font-size: 12px; text-align: center;
+  margin-top: 6px; letter-spacing: 1px;
+}
+#controls span { margin: 0 12px; }
+#mobile-controls {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  gap: 6px;
+  width: 100%;
+}
+@media (pointer: coarse), (max-width: 600px) {
+  #mobile-controls { display: flex; }
+  #controls { display: none; }
+}
+.m-btn {
+  background: rgba(255,215,0,0.12);
+  border: 2px solid #FFD700;
+  color: #FFD700;
+  font-family: 'Courier New', monospace;
+  font-size: 18px;
+  font-weight: bold;
+  border-radius: 8px;
+  padding: 10px 8px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  flex: 1;
+  text-align: center;
+  min-height: 48px;
+}
+.m-btn:active { background: rgba(255,215,0,0.35); }
+.m-btn:focus  { outline: 3px solid #FFD700; outline-offset: 2px; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+</style>
+</head>
+<body>
+<noscript><p style="color:#FFD700;text-align:center;padding:2em">JavaScript is required to play Barney's Bins.</p></noscript>
+<div id="wrap" role="main">
+  <canvas id="game" width="800" height="450"
+    tabindex="0"
+    role="application"
+    aria-label="Barney's Bins — The Rubbish Run! Use arrow keys or W and S to change lane. Space or H to honk. Enter or Space to start.">
+  </canvas>
+  <div id="game-status" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+  <div id="controls" aria-label="Keyboard controls">
+    <span>▲▼ / W S — Change Lane</span>
+    <span>SPACE / H — Honk!</span>
+    <span>ENTER / SPACE — Start</span>
+  </div>
+  <div id="mobile-controls" role="group" aria-label="On-screen game controls">
+    <button class="m-btn" id="btn-up"   aria-label="Move up one lane">▲ UP</button>
+    <button class="m-btn" id="btn-honk" aria-label="Honk the horn">HONK</button>
+    <button class="m-btn" id="btn-down" aria-label="Move down one lane">▼ DN</button>
+  </div>
+</div>
+<script>
+// ============================================================
+//  BARNEY'S BINS — THE RUBBISH RUN!
+// ============================================================
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const W = 800, H = 450;
+const P = 3;
+
+// ==================== COLOUR PALETTE ====================
+const COL = {
+  skin:     '#FFCC99', skinDk:   '#E0A070', skinRed:  '#FF9966',
+  hairDk:   '#5C3317', hairMd:   '#8B5E3C',
+  hivis:    '#FFD700', hivOrg:   '#FF8C00',
+  jeans:    '#3A6EA5', jeansDk:  '#2A4E7A',
+  convW:    '#FFFFFF', convR:    '#CC1111',
+  iris:     '#1565C0', rosy:     '#FFB3B3',
+  lips:     '#CC4444', teeth:    '#FFFFF0',
+  wagDk:    '#1B5E20', wagMd:    '#2E7D32', wagLt:    '#43A047',
+  wagGrey:  '#546E7A', wagDkG:   '#37474F',
+  glass:    '#90CAF9', glassDk:  '#64B5F6',
+  headlt:   '#FFFDE7', grille:   '#212121',
+  road:     '#37474F', roadMd:   '#455A64', roadLt:   '#546E7A',
+  markW:    '#FFEE58', kerb:     '#78909C',
+  pave:     '#BDBDBD', paveDk:   '#9E9E9E',
+  sky1:     '#1565C0', sky2:     '#1976D2', sky3:     '#42A5F5',
+  cloud:    '#ECEFF1', cloudDk:  '#CFD8DC',
+  house1:   '#EFEBE9', house2:   '#D7CCC8', house3:   '#BCAAA4',
+  brick:    '#BF8C70', roof1:    '#6D4C41', roof2:    '#4E342E',
+  winDk:    '#37474F', winLit:   '#FFF9C4',
+  doorCol:  '#5D4037', doorLt:   '#795548',
+  dGown:    '#E91E63', dGownLt:  '#F48FB1', dGownDk:  '#C2185B',
+  curler:   '#9C27B0', curlerLt: '#CE93D8', hairGrey: '#9E9E9E',
+  grumpJkt: '#6D4C41', grumpJktL:'#8D6E63',
+  flatCap:  '#4E342E', newsCol:  '#FFF8E1',
+  ratGrey:  '#9E9E9E', ratDk:    '#616161', ratBelly: '#E0E0E0',
+  ratEye:   '#D32F2F', ratEar:   '#F48FB1', ratNose:  '#E91E63',
+  bagBlk:   '#212121', bagDk:    '#424242', bagDkG:   '#333333',
+  rubA:     '#FF6F00', rubB:     '#1565C0', rubC:     '#2E7D32',
+  binDk:    '#1B5E20', binMd:    '#2E7D32', binLt:    '#66BB6A',
+  rbinDk:   '#0D47A1', rbinMd:   '#1565C0', rbinLt:   '#42A5F5',
+  uiGold:   '#FFD700', uiRed:    '#F44336', uiGreen:  '#4CAF50',
+  uiBlue:   '#2196F3', uiDk:     '#1A1A2E', uiPanel:  'rgba(0,0,0,0.82)',
+  white:    '#FFFFFF', black:    '#000000',
+};
+
+// ==================== SPRITE DEFINITIONS ====================
+
+// BARNEY FACE (14w x 17h)
+const S_BARNEY_FACE = {
+  pal: {
+    1:'#FFCC99', 2:'#E0A070', 3:'#5C3317', 4:'#8B5E3C',
+    5:'#FFD700', 6:'#FF8C00', 7:'#1565C0', 8:'#FFFFFF',
+    9:'#000000',10:'#CC4444',11:'#FFB3B3',12:'#FFFFF0',13:'#FFCC99',
+  },
+  d: [
+    [0,0,3,3,4,3,3,3,3,4,3,3,0,0],
+    [0,3,4,3,3,3,3,3,3,3,3,4,3,0],
+    [0,3,3,4,3,4,3,3,4,3,4,3,3,0],
+    [0,3,1,1,1,1,1,1,1,1,1,1,3,0],
+    [0,1,1,1,1,1,1,1,1,1,1,1,1,0],
+    [0,1,8,7,1,1,1,1,1,1,7,8,1,0],
+    [0,1,7,9,1,1,1,1,1,1,9,7,1,0],
+    [0,1,8,7,1,1,1,1,1,1,7,8,1,0],
+    [0,1,1,1,1,1,1,1,1,1,1,1,1,0],
+    [0,1,11,1,1,1,1,1,1,1,1,11,1,0],
+    [0,1,1,10,10,10,10,10,10,10,1,1,1,0],
+    [0,1,10,12,12,12,12,12,12,12,10,1,1,0],
+    [0,1,10,12,12,12,12,12,12,12,10,1,1,0],
+    [0,1,1,10,10,10,10,10,10,10,1,1,1,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,0,0],
+    [0,0,5,5,5,5,5,5,5,5,5,5,0,0],
+    [0,0,5,6,5,5,5,5,5,5,6,5,0,0],
+  ]
+};
+const S_BARNEY_BLINK = JSON.parse(JSON.stringify(S_BARNEY_FACE));
+S_BARNEY_BLINK.d[5] = [0,1,1,1,1,1,1,1,1,1,1,1,1,0];
+S_BARNEY_BLINK.d[6] = [0,1,3,3,3,3,1,1,3,3,3,3,1,0];
+S_BARNEY_BLINK.d[7] = [0,1,1,1,1,1,1,1,1,1,1,1,1,0];
+const S_BARNEY_OOF = JSON.parse(JSON.stringify(S_BARNEY_FACE));
+S_BARNEY_OOF.d[10]=[0,1,1,1,1,1,1,1,1,1,1,1,1,0];
+S_BARNEY_OOF.d[11]=[0,1,1,10,10,10,10,10,10,10,1,1,1,0];
+S_BARNEY_OOF.d[12]=[0,1,1,1,1,1,1,1,1,1,1,1,1,0];
+S_BARNEY_OOF.d[13]=[0,1,1,1,1,1,1,1,1,1,1,1,1,0];
+
+// MRS MIGGINS (12w x 20h)
+const S_MRS_MIGGINS = {
+  pal: {
+    1:'#FFCC99', 2:'#FF9966', 3:'#E91E63', 4:'#F48FB1',
+    5:'#9C27B0', 6:'#CE93D8', 7:'#9E9E9E', 8:'#FFFFFF',
+    9:'#000000',10:'#C2185B',11:'#CC4444',12:'#FFFFF0',13:'#FF6F00',14:'#EFEBE9',
+  },
+  d: [
+    [0, 5, 0, 6, 5, 6, 5, 6, 0, 5, 0, 0],
+    [0, 5, 7, 6, 7, 7, 7, 7, 6, 5, 0, 0],
+    [0, 0, 7, 7, 7, 7, 7, 7, 7, 7, 0, 0],
+    [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+    [0, 1, 2, 9, 1, 1, 1, 1, 9, 2, 1, 0],
+    [0, 1, 2, 9, 2, 1, 1, 2, 9, 2, 1, 0],
+    [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+    [0, 1, 1,11,11,11,11,11, 1, 1, 1, 0],
+    [0, 0, 1,11,12,12,12,11, 1, 1, 0, 0],
+    [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+    [0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0],
+    [0, 3, 4, 8, 3, 3, 3, 3, 8, 4, 3, 0],
+    [1, 1, 3, 4, 3, 3, 3, 3, 4, 3, 3, 0],
+    [1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 0, 0],
+    [0, 1, 3, 4, 3, 3, 3, 3, 4, 3, 0, 0],
+    [0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0],
+    [0, 0, 3, 4, 3, 3, 3, 3, 4, 3, 0, 0],
+    [0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0],
+    [0, 4, 4, 4, 0, 0, 0, 4, 4, 4, 4, 0],
+    [0, 4, 4, 4, 0, 0, 0, 4, 4, 4, 4, 0],
+  ]
+};
+
+// MR GRUMPY (10w x 18h)
+const S_MR_GRUMPY = {
+  pal: {
+    1:'#FFCC99', 2:'#E0A070', 3:'#4E342E', 4:'#6D4C41',
+    5:'#8D6E63', 6:'#FFF8E1', 7:'#000000', 8:'#FFFFFF',
+    9:'#CC4444',10:'#D7CCC8',11:'#5D4037',12:'#795548',13:'#FF8C00',
+  },
+  d: [
+    [0, 3, 3, 3, 3, 3, 3, 3, 0, 0],
+    [0, 3, 4, 4, 4, 4, 4, 3, 3, 0],
+    [0, 0, 3, 3, 3, 3, 3, 3, 0, 0],
+    [0, 0, 1, 1, 1, 1, 1, 1, 0, 0],
+    [0, 1, 1, 7, 1, 1, 7, 1, 1, 0],
+    [0, 1, 2, 2, 1, 1, 2, 2, 1, 0],
+    [0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+    [0, 1, 9, 9, 9, 9, 9, 1, 1, 0],
+    [0, 0, 1, 1, 1, 1, 1, 1, 0, 0],
+    [0, 0, 5, 5, 5, 5, 5, 5, 0, 0],
+    [0, 5, 8, 5, 5, 5, 5, 8, 5, 0],
+    [0, 5, 5, 5, 5, 5, 5, 5, 5, 0],
+    [6, 6, 6, 5, 5, 5, 5, 5, 5, 0],
+    [6, 7, 6, 5, 5, 5, 5, 5, 0, 0],
+    [6, 6, 6, 5, 5, 5, 5, 5, 0, 0],
+    [0, 0, 5, 5, 5, 5, 5, 5, 0, 0],
+    [0, 0,10,10, 0, 0,10,10, 0, 0],
+    [0, 0,11,11, 0, 0,11,11, 0, 0],
+  ]
+};
+
+// ── RAT (16w × 8h) — longer S-curve tail, frame A ──────────────────────────
+const RAT_PAL = {
+  1:'#9E9E9E', 2:'#616161', 3:'#E0E0E0', 4:'#D32F2F',
+  5:'#F48FB1', 6:'#E91E63', 7:'#BDBDBD', 8:'#424242',
+};
+const S_RAT = {
+  pal: RAT_PAL,
+  d: [
+    // head/body cols 0-8, tail cols 9-15 arcs upward then curves right
+    [0, 0, 5, 1, 1, 1, 1, 0, 0, 0, 8, 8, 8, 8, 8, 0],
+    [0, 5, 5, 1, 4, 1, 1, 1, 0, 8, 1, 8, 0, 0, 0, 8],
+    [0, 0, 1, 1, 1, 1, 1, 1, 1, 6, 0, 0, 0, 0, 8, 8],
+    [0, 0, 1, 3, 3, 1, 1, 1, 1, 6, 0, 0, 0, 0, 0, 0],
+    [0, 0, 1, 3, 3, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 2, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 2, 0, 2, 0, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0],
+    [0, 7, 0, 7, 0, 0, 7, 0, 7, 0, 0, 0, 0, 0, 0, 0],
+  ]
+};
+// Frame B — legs alt, tail slightly lower path (gives swishing animation)
+const S_RAT_B = {
+  pal: RAT_PAL,
+  d: [
+    [0, 0, 5, 1, 1, 1, 1, 0, 0, 0, 8, 0, 0, 0, 0, 0],
+    [0, 5, 5, 1, 4, 1, 1, 1, 0, 8, 1, 8, 8, 8, 0, 0],
+    [0, 0, 1, 1, 1, 1, 1, 1, 1, 6, 0, 0, 0, 8, 8, 8],
+    [0, 0, 1, 3, 3, 1, 1, 1, 1, 6, 0, 0, 0, 0, 0, 8],
+    [0, 0, 1, 3, 3, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 2, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 2, 0, 2, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 7, 0, 7, 7, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0],
+  ]
+};
+
+// GREEN WHEELIE BIN (8w x 13h)
+const S_BIN = {
+  pal: { 1:'#1B5E20', 2:'#2E7D32', 3:'#66BB6A', 4:'#000000', 5:'#FFFFFF', 6:'#43A047', 7:'#388E3C' },
+  d: [
+    [0, 5, 5, 5, 5, 5, 5, 0],
+    [1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 2, 2, 2, 2, 1, 1],
+    [0, 7, 7, 7, 7, 7, 7, 0],
+    [0, 2, 3, 3, 3, 3, 2, 0],
+    [0, 2, 3, 5, 5, 3, 2, 0],
+    [0, 2, 3, 5, 5, 3, 2, 0],
+    [0, 2, 3, 3, 3, 3, 2, 0],
+    [0, 2, 3, 3, 3, 3, 2, 0],
+    [0, 2, 6, 6, 6, 6, 2, 0],
+    [0, 1, 1, 1, 1, 1, 1, 0],
+    [0, 0, 4, 0, 0, 0, 4, 0],
+    [0, 0, 4, 4, 0, 4, 4, 0],
+  ]
+};
+
+// BLUE RECYCLE BIN (8w x 13h) — 100 pts
+const S_BLUE_BIN = {
+  pal: { 1:'#0D47A1', 2:'#1565C0', 3:'#42A5F5', 4:'#000000', 5:'#FFFFFF', 6:'#1E88E5', 7:'#0277BD' },
+  d: [
+    [0, 5, 5, 5, 5, 5, 5, 0],
+    [1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 2, 2, 2, 2, 1, 1],
+    [0, 7, 7, 7, 7, 7, 7, 0],
+    [0, 2, 3, 3, 3, 3, 2, 0],
+    [0, 2, 3, 5, 5, 3, 2, 0],
+    [0, 2, 3, 5, 5, 3, 2, 0],
+    [0, 2, 3, 3, 3, 3, 2, 0],
+    [0, 2, 3, 3, 3, 3, 2, 0],
+    [0, 2, 6, 6, 6, 6, 2, 0],
+    [0, 1, 1, 1, 1, 1, 1, 0],
+    [0, 0, 4, 0, 0, 0, 4, 0],
+    [0, 0, 4, 4, 0, 4, 4, 0],
+  ]
+};
+
+// ── COFFEE MUG (8w × 12h) — obvious hot mug with handle ──────────────────────
+const S_COFFEE = {
+  pal: {
+    1:'#3E2723',  // very dark brown outline
+    2:'#FFFFFF',  // white steam
+    3:'#D7CCC8',  // cup interior (light)
+    4:'#FF8F00',  // hot coffee amber
+    5:'#5D4037',  // mug body brown
+    6:'#795548',  // mug lighter brown
+    7:'#BCAAA4',  // saucer
+    8:'#D7CCC8',  // saucer lighter
+    9:'#FFF9C4',  // steam warm tint
+  },
+  d: [
+    [0, 0, 2, 0, 2, 0, 0, 0],  //  0 steam wisps
+    [0, 2, 9, 2, 9, 2, 0, 0],  //  1 steam fuller
+    [0, 0, 2, 0, 2, 0, 0, 0],  //  2 steam trails
+    [0, 6, 6, 6, 6, 6, 0, 0],  //  3 rim top
+    [0, 1, 4, 4, 4, 1, 0, 0],  //  4 coffee surface (amber)
+    [0, 5, 4, 3, 4, 5, 6, 0],  //  5 mug body + handle top
+    [0, 5, 3, 3, 3, 5, 1, 6],  //  6 mug + handle connector
+    [0, 5, 3, 3, 3, 5, 1, 6],  //  7 mug + handle
+    [0, 5, 3, 3, 3, 5, 6, 0],  //  8 mug + handle bottom
+    [0, 5, 3, 3, 3, 5, 0, 0],  //  9 mug lower
+    [0, 1, 5, 5, 5, 1, 0, 0],  // 10 mug base
+    [7, 7, 7, 7, 7, 7, 7, 0],  // 11 saucer
+  ]
+};
+
+// RUBBISH PILE (16w x 10h)
+const S_RUBBISH = {
+  pal: { 1:'#212121', 2:'#424242', 3:'#333333', 4:'#FF6F00', 5:'#1565C0', 6:'#2E7D32', 7:'#616161', 8:'#9E9E9E' },
+  d: [
+    [0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0],
+    [0, 0, 1, 1, 2, 1, 1, 1, 0, 1, 1, 2, 1, 0, 0, 0],
+    [0, 1, 1, 2, 2, 4, 1, 1, 1, 1, 2, 2, 1, 1, 0, 0],
+    [1, 1, 2, 2, 4, 4, 5, 1, 1, 2, 2, 5, 1, 1, 1, 0],
+    [1, 2, 2, 4, 4, 5, 5, 6, 2, 2, 4, 5, 6, 1, 1, 1],
+    [1, 2, 4, 4, 5, 5, 6, 6, 2, 4, 5, 6, 6, 7, 1, 1],
+    [2, 2, 4, 5, 5, 6, 6, 8, 4, 5, 6, 8, 7, 7, 2, 1],
+    [2, 4, 4, 5, 6, 6, 8, 8, 5, 6, 8, 7, 7, 2, 2, 2],
+    [2, 4, 5, 6, 8, 8, 7, 7, 6, 8, 7, 7, 2, 2, 2, 2],
+  ]
+};
+
+// ==================== SPRITE RENDERER ====================
+function drawSprite(spr, x, y, scale, flipX) {
+  const s = P * (scale || 1);
+  const rows = spr.d, pal = spr.pal;
+  const SW = rows[0].length;
+  for (let r = 0; r < rows.length; r++) {
+    for (let c = 0; c < rows[r].length; c++) {
+      const ci = rows[r][c];
+      if (!ci || !pal[ci]) continue;
+      ctx.fillStyle = pal[ci];
+      const px = flipX ? x + (SW - 1 - c) * s : x + c * s;
+      ctx.fillRect(px, y + r * s, s, s);
+    }
+  }
+}
+
+// ==================== AUDIO ====================
+let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+function playTone(freq, dur, type, vol) {
+  if (!audioCtx) return;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.connect(g); g.connect(audioCtx.destination);
+  o.type = type || 'square';
+  o.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  g.gain.setValueAtTime(vol || 0.08, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  o.start(); o.stop(audioCtx.currentTime + dur);
+}
+function sfxCollect()      { playTone(440,0.04); setTimeout(()=>playTone(660,0.04),40); setTimeout(()=>playTone(880,0.1),80); }
+function sfxHit()          { playTone(180,0.08,'sawtooth',0.15); setTimeout(()=>playTone(100,0.2,'sawtooth',0.1),80); }
+function sfxHonk()         { playTone(200,0.12,'square',0.12); setTimeout(()=>playTone(170,0.2,'square',0.08),100); }
+function sfxLevelUp()      { [440,550,660,770,880].forEach((f,i)=>setTimeout(()=>playTone(f,0.12),i*70)); }
+function sfxPothole()      { playTone(120,0.15,'sawtooth',0.1); }
+function sfxScared()       { playTone(800,0.05,'square',0.08); setTimeout(()=>playTone(600,0.05,'square',0.07),55); setTimeout(()=>playTone(900,0.07,'square',0.06),110); }
+function sfxGameOver()     { [440,392,349,330,294,262,220].forEach((f,i)=>setTimeout(()=>playTone(f,0.28,'sine',0.1),i*200)); }
+function sfxBonusCollect() { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>playTone(f,0.08,'square',0.07),i*50)); }
+// Coffee collect: bright jazzy ascending trill
+function sfxCoffee() {
+  [330,392,494,587,698,784].forEach((f,i)=>setTimeout(()=>playTone(f,0.07,'square',0.09),i*45));
+}
+
+// ==================== ACCESSIBILITY HELPER ====================
+function announceStatus(msg) {
+  const el = document.getElementById('game-status');
+  if (el) { el.textContent = ''; setTimeout(() => { el.textContent = msg; }, 50); }
+}
+
+// ==================== GAME CONSTANTS ====================
+const ROAD_TOP  = 155;
+const ROAD_H    = 270;
+const LANE_H    = ROAD_H / 3;
+const LANE_Y    = [
+  ROAD_TOP + LANE_H * 0.5,
+  ROAD_TOP + LANE_H * 1.5,
+  ROAD_TOP + LANE_H * 2.5,
+];
+const WAGON_X        = 140;
+const HIT_COOL       = 120;
+const SPAWN_X        = W + 60;
+const COFFEE_DURATION = 180;  // 3 seconds at 60fps
+
+// Stable window lighting: computed once, never flickers
+const WIN_LIT = Array.from({ length: 4 }, (_, hi) =>
+  Array.from({ length: 4 }, (_, wi) => ((hi * 4 + wi) * 37 + 11) % 13 > 6)
+);
+
+// ==================== GAME STATE ====================
+let state = 'menu';
+let score = 0, lives = 3, level = 1, hiScore = 0;
+let frameCount = 0, bgScroll = 0, roadScroll = 0;
+let speed = 3.0, speedMult = 1;   // slightly faster start than before
+let barneyLane = 1, barneyTargetLane = 1;
+let barneyY = LANE_Y[1];
+let invTimer = 0, flashTimer = 0;
+let barneyFace = 'normal', barneyFaceTimer = 0;
+let blinkTimer = 200;
+let wagonBounce = 0;
+let exhaustTimer = 0;
+let honkTimer = 0;
+let coffeeTimer = 0;      // frames remaining for coffee power-up
+let scorePopups = [];
+let obstacles = [], collectibles = [], particles = [];
+let clouds = [];
+
+// ==================== ENTITY SYSTEM ====================
+class Entity {
+  constructor(type, lane, x) {
+    this.type   = type;
+    this.lane   = lane;
+    this.x      = x || SPAWN_X;
+    this.y      = LANE_Y[lane];
+    this.active = true;
+    this.frame  = 0;
+    this.dodging  = false;
+    this.dodgeVy  = 0;
+  }
+}
+
+// ==================== BACKGROUND ====================
+function drawSky() {
+  [[0,80,COL.sky1],[80,130,COL.sky2],[130,155,COL.sky3]].forEach(([y1,y2,c])=>{
+    ctx.fillStyle = c; ctx.fillRect(0, y1, W, y2 - y1);
+  });
+}
+function initClouds() {
+  clouds = [];
+  for (let i = 0; i < 6; i++)
+    clouds.push({ x: Math.random()*W, y: 20+Math.random()*70, w: 60+Math.random()*80, speed: 0.2+Math.random()*0.3 });
+}
+function drawClouds() {
+  clouds.forEach(cl => {
+    ctx.fillStyle = COL.cloud;
+    ctx.fillRect(cl.x, cl.y, cl.w, 18);
+    ctx.fillRect(cl.x+10, cl.y-10, cl.w-20, 14);
+    ctx.fillRect(cl.x+cl.w-30, cl.y-8, 30, 12);
+    ctx.fillStyle = COL.cloudDk;
+    ctx.fillRect(cl.x, cl.y+12, cl.w, 6);
+    cl.x -= cl.speed;
+    if (cl.x < -cl.w-20) cl.x = W+20;
+  });
+}
+function drawBuildings() {
+  const scroll = (bgScroll * 0.3) % 320;
+  for (let i = -1; i < 4; i++) drawHouseBlock(i * 320 - scroll);
+}
+function drawHouseBlock(bx) {
+  const houses = [
+    { w:80, h:110, col:COL.house1, roof:COL.roof1, door:'#E53935', dw:18 },
+    { w:75, h:95,  col:COL.house2, roof:COL.roof2, door:'#1565C0', dw:16 },
+    { w:85, h:120, col:COL.house3, roof:COL.roof1, door:'#2E7D32', dw:20 },
+    { w:80, h:100, col:COL.house1, roof:COL.roof2, door:'#6A1B9A', dw:16 },
+  ];
+  let x = bx;
+  houses.forEach((h, hi) => {
+    const baseY = ROAD_TOP - h.h;
+    ctx.fillStyle = h.col; ctx.fillRect(x, baseY, h.w, h.h);
+    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    for (let r = 0; r < h.h; r += 10) {
+      ctx.fillRect(x, baseY+r, h.w, 2);
+      for (let c = 0; c < h.w; c += 18)
+        ctx.fillRect(x+c+(Math.floor(r/10)%2)*9, baseY+r, 14, 8);
+    }
+    ctx.fillStyle = h.roof;
+    ctx.fillRect(x-4,  baseY-6,  h.w+8,   10);
+    ctx.fillRect(x+4,  baseY-14, h.w-8,   10);
+    ctx.fillRect(x+14, baseY-22, h.w-28,  10);
+    ctx.fillRect(x+22, baseY-28, h.w-44,  10);
+    ctx.fillStyle = h.col;
+    ctx.fillRect(x+h.w-20, baseY-36, 12, 22);
+    ctx.fillStyle = COL.roof2;
+    ctx.fillRect(x+h.w-22, baseY-40, 16, 6);
+    // Windows — use pre-computed stable lighting (no flicker)
+    const winY1 = baseY+14, winY2 = baseY+44;
+    [[x+8,winY1],[x+h.w-28,winY1],[x+8,winY2],[x+h.w-28,winY2]].forEach(([wx,wy],wi)=>{
+      ctx.fillStyle = WIN_LIT[hi][wi] ? COL.winLit : COL.winDk;
+      ctx.fillRect(wx, wy, 20, 18);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(wx, wy, 20, 4);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(wx+9, wy, 2, 18); ctx.fillRect(wx, wy+8, 20, 2);
+    });
+    const doorX = x+Math.floor(h.w/2)-Math.floor(h.dw/2), doorY = baseY+h.h-32;
+    ctx.fillStyle = h.door; ctx.fillRect(doorX, doorY, h.dw, 30);
+    ctx.fillStyle = '#FFD700'; ctx.fillRect(doorX+h.dw-6, doorY+14, 4, 4);
+    ctx.fillStyle = COL.paveDk; ctx.fillRect(doorX-4, doorY+28, h.dw+8, 4);
+    x += h.w;
+  });
+}
+function drawPavement() {
+  ctx.fillStyle = COL.pave; ctx.fillRect(0, ROAD_TOP-18, W, 20);
+  ctx.fillStyle = COL.paveDk;
+  const ss = (bgScroll*0.7)%48;
+  for (let x = -ss; x < W; x += 48) {
+    ctx.fillRect(x, ROAD_TOP-18, 2, 20);
+    ctx.fillRect(x+24, ROAD_TOP-6, 24, 2);
+  }
+  ctx.fillStyle = COL.kerb;  ctx.fillRect(0, ROAD_TOP, W, 6);
+  ctx.fillStyle = '#9E9E9E'; ctx.fillRect(0, ROAD_TOP+3, W, 3);
+}
+function drawRoad() {
+  ctx.fillStyle = COL.road; ctx.fillRect(0, ROAD_TOP+6, W, ROAD_H-6);
+  ctx.fillStyle = COL.roadMd;
+  for (let i = 0; i < 3; i++) ctx.fillRect(0, ROAD_TOP+6+i*90+43, W, 4);
+  const ds = roadScroll % 80;
+  ctx.fillStyle = COL.markW;
+  for (let lane = 0; lane < 2; lane++) {
+    const ly = ROAD_TOP+6+(lane+1)*90-3;
+    for (let x = -ds; x < W; x += 80) ctx.fillRect(x, ly, 50, 6);
+  }
+  ctx.fillStyle = '#263238'; ctx.fillRect(0, ROAD_TOP+ROAD_H, W, 4);
+}
+function drawLampPosts() {
+  const scroll = (bgScroll*0.8)%200;
+  for (let i = -1; i < 6; i++) {
+    const lx = i*200 - scroll;
+    ctx.fillStyle = '#607D8B'; ctx.fillRect(lx, ROAD_TOP-90, 6, 92); ctx.fillRect(lx-12, ROAD_TOP-90, 18, 6);
+    ctx.fillStyle = '#FFF9C4'; ctx.fillRect(lx-18, ROAD_TOP-96, 16, 10);
+    ctx.fillStyle = '#FFD700'; ctx.fillRect(lx-16, ROAD_TOP-88, 12, 3);
+  }
+}
+
+// ==================== WAGON ====================
+function drawWagon(x, y, bounce, golden) {
+  const by    = bounce || 0;
+  const wx    = x - 100;
+  // Swap to golden palette when coffee power-up active
+  const cDk   = golden ? '#8B6914' : COL.wagDk;
+  const cMd   = golden ? '#C8960C' : COL.wagMd;
+  const cLt   = golden ? '#FFD700' : COL.wagLt;
+
+  // Bin body
+  ctx.fillStyle = cDk; ctx.fillRect(wx, y-72+by, 140, 76);
+  ctx.fillStyle = cMd; ctx.fillRect(wx+2, y-70+by, 136, 70);
+  ctx.fillStyle = cDk;
+  for (let i = 0; i < 4; i++) ctx.fillRect(wx+4+i*32, y-68+by, 2, 65);
+  ctx.fillStyle = COL.white; ctx.font = 'bold 11px Courier New';
+  ctx.fillText("BARNEY'S BINS", wx+8, y-24+by);
+  ctx.fillStyle = golden ? '#FFF176' : COL.hivis;
+  ctx.fillRect(wx+4, y-14+by, 132, 6);
+
+  // Lift mechanism
+  ctx.fillStyle = COL.wagGrey;
+  ctx.fillRect(wx-14, y-50+by, 16, 46);
+  ctx.fillRect(wx-20, y-52+by, 8, 8);
+  ctx.fillRect(wx-20, y+0+by, 8, 8);
+
+  // Cab
+  const cabX = wx+140, cabH = 70;
+  ctx.fillStyle = cLt; ctx.fillRect(cabX, y-cabH+by, 65, cabH);
+  ctx.fillStyle = cDk; ctx.fillRect(cabX, y-cabH+by, 65, 4);
+  ctx.fillStyle = cMd;
+  ctx.fillRect(cabX+55, y-cabH+by, 14, 10);
+  ctx.fillRect(cabX+58, y-cabH+10+by, 10, 10);
+  ctx.fillRect(cabX+60, y-cabH+20+by, 8, 20);
+
+  // Windscreen
+  ctx.fillStyle = COL.glassDk; ctx.fillRect(cabX+4, y-cabH+8+by, 50, 42);
+  ctx.fillStyle = COL.glass;   ctx.fillRect(cabX+6, y-cabH+10+by, 46, 38);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.fillRect(cabX+6, y-cabH+10+by, 20, 12);
+  ctx.fillRect(cabX+8, y-cabH+22+by, 8, 14);
+
+  // Barney face
+  const faceSpr = barneyFace==='blink' ? S_BARNEY_BLINK : barneyFace==='oof' ? S_BARNEY_OOF : S_BARNEY_FACE;
+  drawSprite(faceSpr, cabX+7, y-cabH+11+by, 0.9);
+
+  // Grille / headlight / bumper
+  ctx.fillStyle = COL.grille; ctx.fillRect(cabX+62, y-40+by, 14, 34);
+  ctx.fillStyle = '#37474F';
+  for (let gr = 0; gr < 5; gr++) ctx.fillRect(cabX+64, y-38+by+gr*6, 10, 4);
+  ctx.fillStyle = golden ? '#FFD700' : COL.headlt; ctx.fillRect(cabX+60, y-55+by, 16, 12);
+  ctx.fillStyle = golden ? '#FFFF44' : '#FFFF88';  ctx.fillRect(cabX+62, y-53+by, 12, 8);
+  ctx.fillStyle = '#455A64'; ctx.fillRect(cabX+56, y+0+by, 20, 8);
+
+  // Wheels
+  drawWheel(wx+28,    y+8+by, 22, frameCount*0.08);
+  drawWheel(cabX+28,  y+8+by, 22, frameCount*0.08);
+
+  // Golden shimmer overlay + sparkle
+  if (golden) {
+    const pulse = 0.18 + Math.sin(frameCount * 0.18) * 0.09;
+    ctx.fillStyle = `rgba(255,215,0,${pulse})`;
+    ctx.fillRect(wx-2, y-74+by, 210, 82);
+    // Moving sparkle dots
+    ctx.fillStyle = 'rgba(255,255,180,0.9)';
+    const gx = (frameCount * 3) % 190;
+    ctx.fillRect(wx+gx,         y-68+by, 4, 4);
+    ctx.fillRect(wx+(gx+63)%190, y-52+by, 3, 3);
+    ctx.fillRect(wx+(gx+126)%190, y-66+by, 4, 4);
+  }
+
+  // Exhaust
+  if (exhaustTimer <= 0) { spawnExhaust(cabX+70, y-52+by); exhaustTimer = 18+Math.random()*10; }
+}
+
+function drawWheel(cx, cy, r, rot) {
+  ctx.fillStyle = '#1A1A1A';
+  for (let a = 0; a < Math.PI*2; a += 0.3)
+    ctx.fillRect(cx+Math.cos(a)*r-3, cy+Math.sin(a)*r-3, 6, 6);
+  ctx.fillRect(cx-r, cy-4, r*2, 8); ctx.fillRect(cx-4, cy-r, 8, r*2);
+  ctx.fillStyle = '#78909C'; ctx.fillRect(cx-10, cy-10, 20, 20);
+  ctx.fillStyle = '#90A4AE'; ctx.fillRect(cx-7, cy-7, 14, 14);
+  ctx.fillStyle = '#37474F';
+  for (let i = 0; i < 5; i++) {
+    const a = rot+(i/5)*Math.PI*2;
+    ctx.fillRect(cx+Math.cos(a)*6-2, cy+Math.sin(a)*6-2, 4, 4);
+  }
+  ctx.fillStyle = '#546E7A'; ctx.fillRect(cx-3, cy-3, 6, 6);
+}
+
+// ==================== OBSTACLE DRAWING ====================
+function drawPothole(x, y) {
+  ctx.fillStyle = '#5D4037';
+  ctx.fillRect(x-40, y-15, 80, 30); ctx.fillRect(x-30, y-23, 60, 12);
+  ctx.fillRect(x-30, y+11, 60, 12); ctx.fillRect(x+28, y-17, 14, 8);
+  ctx.fillRect(x-42, y+8,  10, 8);
+  ctx.fillStyle = '#37474F';
+  ctx.fillRect(x-36, y-12, 72, 24); ctx.fillRect(x-24, y-20, 48, 10);
+  ctx.fillRect(x-24, y+10, 48, 10);
+  ctx.fillStyle = '#111111';
+  ctx.fillRect(x-30, y-10, 60, 20); ctx.fillRect(x-20, y-17, 40, 9);
+  ctx.fillRect(x-20, y+8,  40, 9);  ctx.fillRect(x-36, y-6,  10, 12);
+  ctx.fillRect(x+26, y-6,  10, 12);
+  ctx.fillStyle = '#1C313A'; ctx.fillRect(x-24, y-7, 48, 14);
+  ctx.fillStyle = 'rgba(90,150,190,0.35)'; ctx.fillRect(x-20, y-5, 40, 10);
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.fillRect(x-14, y-3, 14, 3); ctx.fillRect(x+4, y+1, 8, 2);
+  ctx.fillStyle = '#8D6E63';
+  ctx.fillRect(x-38,y-8,6,4); ctx.fillRect(x+32,y+4,7,4);
+  ctx.fillRect(x-32,y+14,9,4); ctx.fillRect(x+16,y-19,7,4);
+  ctx.fillRect(x-6,y+17,5,4); ctx.fillRect(x+8,y-21,5,5);
+  ctx.fillRect(x-42,y+2,5,3); ctx.fillRect(x+36,y-10,4,4);
+  ctx.fillStyle = 'rgba(255,214,0,0.55)';
+  ctx.fillRect(x-40,y-15,10,3); ctx.fillRect(x+30,y+12,10,3);
+  ctx.fillRect(x-40,y+11, 8,3); ctx.fillRect(x+32,y-15, 8,3);
+}
+
+function drawRubbishPile(x, y) { drawSprite(S_RUBBISH, x-24, y-30, 1); }
+
+// ==================== COLLECTIBLE DRAWING ====================
+function drawBin(x, y, bob) {
+  drawSprite(S_BIN, x-12, y-36+bob, 1);
+  ctx.fillStyle = 'rgba(100,255,100,0.15)';
+  ctx.fillRect(x-16, y-40+bob, 32, 44);
+}
+
+function drawBlueBin(x, y, bob) {
+  drawSprite(S_BLUE_BIN, x-12, y-36+bob, 1);
+  ctx.fillStyle = 'rgba(30,136,229,0.22)';
+  ctx.fillRect(x-16, y-40+bob, 32, 44);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillRect(x-8, y-24+bob, 16, 5);
+}
+
+function drawCoffeeCup(x, y, bob) {
+  // Draw at scale 1.2 so it's obviously a mug (each sprite pixel = ~3.6 screen px)
+  drawSprite(S_COFFEE, x-15, y-36+bob, 1.2);
+  // Animated steam trails above the mug
+  const sw = Math.sin(frameCount * 0.12) * 3;
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillRect(x-4+sw, y-45+bob, 4, 12);
+  ctx.fillRect(x+4-sw, y-50+bob, 4, 14);
+  // Warm amber glow to make it pop off the road
+  ctx.fillStyle = 'rgba(255,150,0,0.22)';
+  ctx.fillRect(x-18, y-44+bob, 38, 48);
+}
+
+// ==================== NPC DRAWING ====================
+function drawMrsMiggins(x, y, animFrame) {
+  drawSprite(S_MRS_MIGGINS, x-18, y-58, 1, true);
+  if (Math.floor(animFrame/30)%2===0) {
+    ctx.fillStyle=COL.white; ctx.fillRect(x-50,y-90,44,22); ctx.fillRect(x-42,y-68,10,8);
+    ctx.fillStyle='#000'; ctx.font='bold 10px Courier New'; ctx.fillText('OI!',x-45,y-74);
+  }
+}
+function drawMrGrumpy(x, y, animFrame) {
+  drawSprite(S_MR_GRUMPY, x-15, y-52, 1, true);
+  if (Math.floor(animFrame/40)%2===0) {
+    ctx.fillStyle=COL.white; ctx.fillRect(x-72,y-80,68,22); ctx.fillRect(x-50,y-58,10,8);
+    ctx.fillStyle='#000'; ctx.font='8px Courier New'; ctx.fillText("BLOOMIN' BINS!",x-68,y-64);
+  }
+}
+function drawScaredNPC(type, x, y) {
+  if (type==='miggins') drawSprite(S_MRS_MIGGINS, x-18, y-58, 1, false);
+  if (type==='grumpy')  drawSprite(S_MR_GRUMPY,   x-15, y-52, 1, false);
+  ctx.fillStyle=COL.white; ctx.fillRect(x-36,y-80,50,18); ctx.fillRect(x-20,y-62,8,6);
+  ctx.fillStyle='#D32F2F'; ctx.font='bold 9px Courier New'; ctx.fillText('YIKES!',x-32,y-67);
+}
+function drawRat(x, y, animFrame) {
+  drawSprite(Math.floor(animFrame/4)%2===0 ? S_RAT : S_RAT_B, x-18, y-22, 1);
+}
+
+// ==================== PARTICLES ====================
+function spawnExhaust(x, y) {
+  particles.push({ type:'smoke', x, y, vx:0.5+Math.random()*0.5, vy:-0.3-Math.random()*0.5, life:40+Math.random()*20, maxLife:60, size:6+Math.random()*6 });
+}
+function spawnHitEffect(x, y) {
+  for (let i=0;i<10;i++) {
+    const a=(i/10)*Math.PI*2;
+    particles.push({ type:'spark',x,y, vx:Math.cos(a)*(2+Math.random()*3), vy:Math.sin(a)*(2+Math.random()*3), life:20+Math.random()*15, maxLife:35, col:['#FF5252','#FF9800','#FFEB3B'][Math.floor(Math.random()*3)] });
+  }
+}
+function spawnCollectEffect(x, y, col) {
+  for (let i=0;i<8;i++) {
+    const a=(i/8)*Math.PI*2;
+    particles.push({ type:'star',x,y, vx:Math.cos(a)*(1.5+Math.random()*2), vy:Math.sin(a)*(1.5+Math.random()*2)-1, life:25+Math.random()*10, maxLife:35, col:col||'#FFD700' });
+  }
+}
+function spawnCoffeeEffect(x, y) {
+  for (let i=0;i<12;i++) {
+    const a=(i/12)*Math.PI*2;
+    particles.push({ type:'star',x,y, vx:Math.cos(a)*(2+Math.random()*3), vy:Math.sin(a)*(2+Math.random()*3)-1.5, life:35+Math.random()*15, maxLife:50, col:['#FFD700','#FF8F00','#FFFFFF'][Math.floor(Math.random()*3)] });
+  }
+}
+function updateAndDrawParticles() {
+  particles = particles.filter(p=>p.life>0);
+  particles.forEach(p => {
+    const alpha = p.life/p.maxLife;
+    p.x+=p.vx; p.y+=p.vy; p.life--;
+    if (p.type==='smoke') {
+      ctx.fillStyle=`rgba(176,190,197,${alpha*0.5})`;
+      const s=p.size*(1.5-alpha); ctx.fillRect(p.x-s/2,p.y-s/2,s,s);
+    } else {
+      ctx.fillStyle=p.col; ctx.globalAlpha=alpha;
+      ctx.fillRect(p.x-3,p.y-3,6,6); ctx.globalAlpha=1;
+    }
+    p.vx*=0.97; p.vy*=0.97;
+  });
+}
+function spawnScorePopup(x, y, text, col) {
+  scorePopups.push({ x, y, text, col:col||COL.uiGold, life:60 });
+}
+function updateDrawPopups() {
+  scorePopups = scorePopups.filter(p=>p.life>0);
+  scorePopups.forEach(p => {
+    ctx.globalAlpha=p.life/60; ctx.fillStyle=p.col;
+    ctx.font='bold 16px Courier New'; ctx.fillText(p.text,p.x,p.y);
+    p.y-=0.8; p.life--; ctx.globalAlpha=1;
+  });
+}
+
+// ==================== UI ====================
+function drawUI() {
+  ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,36);
+
+  ctx.fillStyle=COL.uiGold; ctx.font='bold 14px Courier New'; ctx.fillText('SCORE',12,16);
+  ctx.font='bold 18px Courier New'; ctx.fillText(String(score).padStart(7,'0'),12,34);
+
+  ctx.fillStyle='#FF8A65'; ctx.font='bold 14px Courier New'; ctx.fillText('BEST',150,16);
+  ctx.font='bold 18px Courier New'; ctx.fillText(String(hiScore).padStart(7,'0'),150,34);
+
+  ctx.fillStyle='#80CBC4'; ctx.font='bold 14px Courier New'; ctx.fillText('LEVEL',320,16);
+  ctx.font='bold 18px Courier New'; ctx.fillText(String(level),330,34);
+
+  // Speed bar
+  ctx.fillStyle='#B0BEC5'; ctx.font='bold 12px Courier New'; ctx.fillText('SPEED',400,16);
+  ctx.fillStyle=COL.roadMd; ctx.fillRect(400,18,80,12);
+  ctx.fillStyle=speed>5?'#F44336':speed>3.5?'#FF9800':COL.uiGreen;
+  ctx.fillRect(400,18,Math.min(80,(speed*speedMult/9)*80),12);
+
+  // Coffee power-up bar — glows gold across the top when active
+  if (coffeeTimer > 0) {
+    const ratio = coffeeTimer / COFFEE_DURATION;
+    // Full-width bar at very top
+    ctx.fillStyle = `rgba(255,215,0,0.25)`;
+    ctx.fillRect(0, 0, W, 4);
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(0, 0, W * ratio, 4);
+    // Label
+    ctx.fillStyle = coffeeTimer < 60 && Math.floor(frameCount/8)%2===0 ? '#FF5252' : '#FFD700';
+    ctx.font = 'bold 11px Courier New';
+    ctx.fillText('ZOOM! ' + Math.ceil(coffeeTimer/60) + 's', W/2 - 28, 34);
+  }
+
+  // Lives hearts
+  ctx.fillStyle='#EF9A9A'; ctx.font='bold 14px Courier New'; ctx.fillText('LIVES',W-130,16);
+  for (let i=0;i<3;i++) drawHeart(W-120+i*34, 20, i<lives);
+}
+
+function drawHeart(x, y, filled) {
+  ctx.fillStyle = filled ? COL.uiRed : '#37474F';
+  ctx.fillRect(x+2,y,6,4); ctx.fillRect(x+12,y,6,4);
+  ctx.fillRect(x,y+4,20,6); ctx.fillRect(x+2,y+10,16,4);
+  ctx.fillRect(x+4,y+14,12,4); ctx.fillRect(x+6,y+18,8,4);
+  ctx.fillRect(x+8,y+22,4,4);
+  if (filled) { ctx.fillStyle='#FF8A80'; ctx.fillRect(x+4,y+2,3,3); }
+}
+function drawHitFlash() {
+  if (flashTimer>0) {
+    ctx.fillStyle=`rgba(255,0,0,${(flashTimer/20)*0.35})`;
+    ctx.fillRect(0,0,W,H); flashTimer--;
+  }
+}
+
+// ==================== HONK DODGE MECHANIC ====================
+function honkNearby() {
+  obstacles.forEach(obs => {
+    if (!obs.active || obs.dodging) return;
+    if (obs.type!=='miggins' && obs.type!=='grumpy') return;
+    if (obs.lane!==barneyLane && obs.lane!==barneyTargetLane) return;
+    const dist = obs.x - WAGON_X;
+    if (dist < 10 || dist > 360) return;
+    obs.dodging = true; obs.dodgeVy = -3.8;
+    score += 10; if (score>hiScore) hiScore=score;
+    spawnScorePopup(obs.x, obs.y-50, 'MOVE IT! +10', COL.uiGold);
+    sfxScared();
+  });
+}
+
+// ==================== SPAWN ====================
+let nextSpawn = 80;
+function getSpawnInterval() {
+  return Math.max(40, 100 - level*8 - Math.floor(score/500)*3);
+}
+function spawnEntity() {
+  const lane = Math.floor(Math.random()*3);
+  const roll = Math.random();
+  const obsChance = 0.45 + level*0.06;
+  if (roll < obsChance) {
+    const oRoll = Math.random();
+    let type;
+    if (oRoll<0.25)      type='pothole';
+    else if (oRoll<0.5)  type='rubbish';
+    else if (oRoll<0.75) type='miggins';
+    else                 type='grumpy';
+    if (Math.random()<0.15) type='rat';
+    const ent = new Entity(type, lane, SPAWN_X);
+    obstacles.push(ent);
+  } else {
+    const cRoll = Math.random();
+    // Green bin 55%, coffee 20%, blue recycle bin 25%
+    const type = cRoll < 0.55 ? 'bin' : cRoll < 0.75 ? 'coffee' : 'bluebin';
+    collectibles.push(new Entity(type, lane, SPAWN_X));
+  }
+}
+
+// ==================== COLLISION ====================
+function checkCollisions() {
+  if (invTimer > 0) return;
+  const wagLeft = WAGON_X-95, wagRight = WAGON_X+75;
+  obstacles.forEach(obs => {
+    if (!obs.active || obs.dodging) return;
+    if (obs.lane!==barneyLane && obs.lane!==barneyTargetLane) return;
+    if (obs.x<wagLeft || obs.x>wagRight) return;
+    handleObstacleHit(obs);
+  });
+  collectibles.forEach(col => {
+    if (!col.active) return;
+    if (col.lane!==barneyLane && col.lane!==barneyTargetLane) return;
+    if (col.x<wagLeft-20 || col.x>wagRight+20) return;
+    handleCollect(col);
+  });
+}
+
+function handleObstacleHit(obs) {
+  obs.active = false; lives--;
+  if (lives<=0) {
+    if (score>hiScore) hiScore=score;
+    sfxGameOver();
+    announceStatus('Game over! Final score: '+score+'. Press Enter or Space to try again.');
+    state='gameover'; return;
+  }
+  invTimer=HIT_COOL; flashTimer=20;
+  wagonBounce=(obs.type==='pothole')?12:0;
+  barneyFace='oof'; barneyFaceTimer=80;
+  sfxHit(); spawnHitEffect(WAGON_X+40, barneyY-20);
+  let msg='';
+  if (obs.type==='pothole')                        { sfxPothole(); spawnScorePopup(WAGON_X,barneyY-60,'OUCH!',COL.uiRed); msg='Hit a pothole!'; }
+  else if (obs.type==='miggins'||obs.type==='grumpy') { spawnScorePopup(WAGON_X,barneyY-60,'OI!!','#FF8F00'); msg='Hit by a resident!'; }
+  else                                             { spawnScorePopup(WAGON_X,barneyY-60,'SQUEAK!','#F48FB1'); msg='Hit a rat!'; }
+  announceStatus(msg+' '+lives+' lives remaining.');
+}
+
+function handleCollect(col) {
+  col.active=false;
+  if (col.type==='bin') {
+    score+=50; if(score>hiScore) hiScore=score;
+    spawnScorePopup(col.x,col.y-30,'+50',COL.uiGreen);
+    sfxCollect(); spawnCollectEffect(col.x, col.y, '#FFD700');
+  }
+  if (col.type==='bluebin') {
+    score+=100; if(score>hiScore) hiScore=score;
+    spawnScorePopup(col.x,col.y-30,'+100 RECYCLE!',COL.uiBlue);
+    sfxBonusCollect(); spawnCollectEffect(col.x, col.y, '#42A5F5');
+  }
+  if (col.type==='coffee') {
+    score+=25; if(score>hiScore) hiScore=score;
+    // Coffee = speed boost + 3 second golden invulnerability
+    coffeeTimer = COFFEE_DURATION;
+    speedMult   = 1.5;
+    invTimer    = Math.max(invTimer, COFFEE_DURATION);
+    spawnScorePopup(col.x, col.y-30, '+25 ZOOM!', '#FF8F00');
+    sfxCoffee(); spawnCoffeeEffect(col.x, col.y);
+    announceStatus('Coffee! Speed boost and 3 seconds of invulnerability!');
+  }
+  barneyFace='normal'; barneyFaceTimer=40;
+}
+
+// ==================== UPDATE ====================
+function update() {
+  bgScroll  += speed * speedMult * 0.5;
+  roadScroll += speed * speedMult;
+  exhaustTimer--;
+
+  // Lane lerp
+  const targetY = LANE_Y[barneyTargetLane];
+  barneyY += (targetY-barneyY)*0.15;
+  if (Math.abs(barneyY-targetY)<1) { barneyY=targetY; barneyLane=barneyTargetLane; }
+
+  // Bounce decay
+  if (wagonBounce>0) wagonBounce=Math.max(0, wagonBounce-1.5);
+
+  // Face management
+  if (barneyFaceTimer>0) { barneyFaceTimer--; if(barneyFaceTimer===0) barneyFace='normal'; }
+  blinkTimer--;
+  if (blinkTimer<=0) { barneyFace='blink'; barneyFaceTimer=8; blinkTimer=180+Math.floor(Math.random()*120); }
+
+  if (invTimer>0) invTimer--;
+  if (honkTimer>0) honkTimer--;
+
+  // Coffee power-up countdown
+  if (coffeeTimer>0) {
+    coffeeTimer--;
+    invTimer = Math.max(invTimer, 1); // stay invulnerable for full duration
+    if (coffeeTimer===0) {
+      speedMult=1;
+      announceStatus('Speed boost ended.');
+    }
+  }
+
+  // Distance score
+  if (frameCount%60===0) score+=level;
+
+  // Level up
+  const newLevel = 1+Math.floor(score/800);
+  if (newLevel>level) {
+    level=newLevel;
+    speed=Math.min(8, 3.0+level*0.4);  // slightly steeper curve
+    sfxLevelUp();
+    spawnScorePopup(W/2-50, H/2, `LEVEL ${level}!`, COL.uiGold);
+    announceStatus('Level '+level+'! Speed increasing.');
+  }
+
+  // Spawn
+  nextSpawn--;
+  if (nextSpawn<=0) { spawnEntity(); nextSpawn=getSpawnInterval()+Math.floor(Math.random()*20); }
+
+  // Move entities
+  obstacles.forEach(o=>{
+    o.x -= speed*speedMult; o.frame++;
+    if (o.dodging) { o.y+=o.dodgeVy; if(o.y<ROAD_TOP-70) o.active=false; }
+  });
+  collectibles.forEach(c=>{ c.x-=speed*speedMult; c.frame++; });
+  obstacles    = obstacles.filter(o=>o.x>-200 && o.active);
+  collectibles = collectibles.filter(c=>c.x>-200 && c.active);
+
+  checkCollisions();
+}
+
+// ==================== DRAW ====================
+function draw() {
+  ctx.clearRect(0,0,W,H);
+  drawSky(); drawClouds(); drawBuildings(); drawLampPosts(); drawPavement(); drawRoad();
+
+  collectibles.forEach(c=>{
+    const bob = Math.sin(frameCount*0.08 + c.x*0.01)*4;
+    if (c.type==='bin')     drawBin(c.x, c.y, bob);
+    if (c.type==='bluebin') drawBlueBin(c.x, c.y, bob);
+    if (c.type==='coffee')  drawCoffeeCup(c.x, c.y, bob);
+  });
+
+  obstacles.forEach(o=>{
+    if (o.type==='pothole') drawPothole(o.x, o.y);
+    if (o.type==='rubbish') drawRubbishPile(o.x, o.y);
+    if (o.dodging) { drawScaredNPC(o.type, o.x, o.y); }
+    else {
+      if (o.type==='miggins') drawMrsMiggins(o.x, o.y, o.frame);
+      if (o.type==='grumpy')  drawMrGrumpy(o.x, o.y, o.frame);
+    }
+    if (o.type==='rat') drawRat(o.x, o.y, o.frame);
+  });
+
+  // Wagon — golden during coffee boost, flickers during hit invulnerability
+  const bounce = Math.sin(wagonBounce*0.8)*wagonBounce*0.8;
+  if (coffeeTimer>0) {
+    drawWagon(WAGON_X, barneyY, bounce, true);   // solid gold, no flicker
+  } else if (invTimer<=0 || Math.floor(invTimer/6)%2===0) {
+    drawWagon(WAGON_X, barneyY, bounce, false);  // normal or flickering
+  }
+
+  updateAndDrawParticles();
+  updateDrawPopups();
+  drawUI();
+  drawHitFlash();
+}
+
+// ==================== SCREENS ====================
+function drawMenu() {
+  drawSky(); drawClouds(); drawBuildings(); drawLampPosts(); drawPavement(); drawRoad();
+  ctx.fillStyle='rgba(0,0,0,0.78)'; ctx.fillRect(80,60,640,330);
+  ctx.fillStyle=COL.uiGold; ctx.fillRect(80,60,640,6); ctx.fillRect(80,384,640,6);
+  ctx.fillStyle=COL.hivOrg; ctx.fillRect(82,66,636,4);
+  ctx.fillStyle=COL.uiGold; ctx.font='bold 42px Courier New'; ctx.fillText("BARNEY'S BINS",130,140);
+  ctx.fillStyle=COL.white;  ctx.font='bold 20px Courier New'; ctx.fillText('— THE RUBBISH RUN —',210,168);
+  drawSprite(S_BARNEY_FACE,190,180,1.4);
+  ctx.fillStyle='#B0BEC5'; ctx.font='14px Courier New';
+  ctx.fillText('Collect green bins (+50) and blue recycle bins (+100)!',152,290);
+  ctx.fillText('Grab a coffee for a ZOOM boost! Honk to scare residents!',145,312);
+  ctx.fillStyle='#80CBC4'; ctx.font='13px Courier New';
+  ctx.fillText('▲ ▼ / W S = Lane    SPACE = Honk    ENTER = Start',168,340);
+  ctx.fillStyle=COL.uiGreen; ctx.font='bold 16px Courier New';
+  if (Math.floor(frameCount/30)%2===0) ctx.fillText('>>> PRESS ENTER, SPACE OR TAP TO START <<<',130,378);
+  if (hiScore>0) { ctx.fillStyle='#FF8A65'; ctx.font='bold 14px Courier New'; ctx.fillText(`BEST: ${hiScore}`,360,58); }
+}
+
+function drawGameOver() {
+  draw();
+  ctx.fillStyle='rgba(0,0,0,0.8)'; ctx.fillRect(150,100,500,280);
+  ctx.fillStyle=COL.uiRed; ctx.fillRect(150,100,500,6); ctx.fillRect(150,374,500,6);
+  ctx.fillStyle=COL.uiRed; ctx.font='bold 40px Courier New'; ctx.fillText('GAME OVER!',210,175);
+  drawSprite(S_BARNEY_OOF,330,185,1.2);
+  ctx.fillStyle=COL.uiGold; ctx.font='bold 22px Courier New';
+  ctx.fillText(`SCORE: ${String(score).padStart(7,'0')}`,235,280);
+  if (score>=hiScore) { ctx.fillStyle='#FF8A65'; ctx.font='bold 16px Courier New'; ctx.fillText('*** NEW BEST! ***',295,310); }
+  else { ctx.fillStyle='#90A4AE'; ctx.font='bold 14px Courier New'; ctx.fillText(`BEST: ${String(hiScore).padStart(7,'0')}`,305,310); }
+  ctx.fillStyle=COL.uiGreen; ctx.font='bold 16px Courier New';
+  if (Math.floor(frameCount/25)%2===0) ctx.fillText('PRESS ENTER, SPACE OR TAP TO TRY AGAIN',160,355);
+}
+
+// ==================== GAME CONTROL ====================
+function startGame() {
+  ensureAudio();
+  state='playing';
+  score=0; lives=3; level=1;
+  speed=3.0; speedMult=1; coffeeTimer=0;
+  barneyLane=1; barneyTargetLane=1; barneyY=LANE_Y[1];
+  obstacles=[]; collectibles=[]; particles=[]; scorePopups=[];
+  nextSpawn=80; invTimer=0; flashTimer=0; wagonBounce=0;
+  barneyFace='normal'; barneyFaceTimer=0; blinkTimer=200;
+  frameCount=0; roadScroll=0;
+  announceStatus('Game started. Level 1. 3 lives. Grab coffee for a speed boost!');
+  canvas.focus();
+}
+
+// ==================== INPUT ====================
+const keys = {};
+document.addEventListener('keydown', e => {
+  if (keys[e.code]) return;
+  keys[e.code]=true; ensureAudio();
+  if (state==='playing') {
+    if ((e.code==='ArrowUp'  ||e.code==='KeyW') && barneyTargetLane>0) barneyTargetLane--;
+    if ((e.code==='ArrowDown'||e.code==='KeyS') && barneyTargetLane<2) barneyTargetLane++;
+    if (e.code==='Space'||e.code==='KeyH') { if(honkTimer<=0){sfxHonk();honkTimer=45;honkNearby();} }
+  } else { if(e.code==='Enter'||e.code==='Space') startGame(); }
+  if (['ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
+});
+document.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+let touchStartY=0;
+canvas.addEventListener('touchstart', e=>{ touchStartY=e.touches[0].clientY; ensureAudio(); if(state!=='playing') startGame(); e.preventDefault(); },{ passive:false });
+canvas.addEventListener('touchend', e=>{
+  const dy=e.changedTouches[0].clientY-touchStartY;
+  if(state==='playing') {
+    if(dy<-20 && barneyTargetLane>0) barneyTargetLane--;
+    if(dy>20  && barneyTargetLane<2) barneyTargetLane++;
+    if(Math.abs(dy)<15){ if(honkTimer<=0){sfxHonk();honkTimer=45;honkNearby();} }
+  }
+  e.preventDefault();
+},{ passive:false });
+
+// ==================== MOBILE BUTTONS ====================
+function setupMobileButtons() {
+  const btnUp=document.getElementById('btn-up'), btnDown=document.getElementById('btn-down'), btnHonk=document.getElementById('btn-honk');
+  if (!btnUp) return;
+  const onUp  =e=>{ e.preventDefault(); ensureAudio(); if(state==='playing'){if(barneyTargetLane>0)barneyTargetLane--;}else startGame(); };
+  const onDown=e=>{ e.preventDefault(); ensureAudio(); if(state==='playing'){if(barneyTargetLane<2)barneyTargetLane++;}else startGame(); };
+  const onHonk=e=>{ e.preventDefault(); ensureAudio(); if(state==='playing'){if(honkTimer<=0){sfxHonk();honkTimer=45;honkNearby();}}else startGame(); };
+  btnUp.addEventListener('touchstart',onUp,{passive:false}); btnUp.addEventListener('mousedown',onUp);
+  btnDown.addEventListener('touchstart',onDown,{passive:false}); btnDown.addEventListener('mousedown',onDown);
+  btnHonk.addEventListener('touchstart',onHonk,{passive:false}); btnHonk.addEventListener('mousedown',onHonk);
+}
+setupMobileButtons();
+
+// ==================== GAME LOOP ====================
+function loop() {
+  frameCount++;
+  if      (state==='menu')     { bgScroll+=0.5; drawMenu(); }
+  else if (state==='playing')  { update(); draw(); }
+  else if (state==='gameover') { bgScroll+=0.2; drawGameOver(); }
+  requestAnimationFrame(loop);
+}
+
+// ==================== INIT ====================
+// Explicitly set canvas height from its rendered width (fallback for browsers
+// where height:auto on <canvas> doesn't honour the intrinsic 800:450 ratio)
+function fixCanvasHeight() {
+  canvas.style.height = Math.round(canvas.offsetWidth * 9 / 16) + 'px';
+}
+window.addEventListener('resize', fixCanvasHeight);
+window.addEventListener('orientationchange', function () { setTimeout(fixCanvasHeight, 200); });
+fixCanvasHeight();
+initClouds();
+loop();
+</script>
+</body>
+</html>
