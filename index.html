@@ -71,6 +71,34 @@ canvas:focus { outline: 3px solid #FFD700; outline-offset: 2px; }
   padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0,0,0,0); white-space: nowrap; border: 0;
 }
+/* Portrait auto-rotate */
+@media (orientation: portrait) and (pointer: coarse) {
+  body { overflow: hidden; }
+}
+/* Name-entry overlay */
+#name-overlay {
+  display: none; position: fixed; inset: 0; z-index: 30;
+  background: rgba(0,0,0,0.88);
+  align-items: center; justify-content: center; flex-direction: column;
+  font-family: 'Courier New', monospace; color: #FFD700; text-align: center;
+  padding: 24px;
+}
+#name-overlay.visible { display: flex; }
+#name-overlay h2 { font-size: 22px; margin-bottom: 10px; }
+#name-overlay p  { font-size: 14px; color: #ccc; margin-bottom: 14px; }
+#name-input {
+  font-family: 'Courier New', monospace; font-size: 30px;
+  text-transform: uppercase; text-align: center;
+  width: 200px; background: #111; color: #FFD700;
+  border: 3px solid #FFD700; padding: 8px; letter-spacing: 8px;
+  margin-bottom: 18px; border-radius: 4px;
+}
+#name-submit {
+  font-family: 'Courier New', monospace; background: rgba(255,215,0,0.15);
+  color: #FFD700; border: 2px solid #FFD700; padding: 10px 32px;
+  cursor: pointer; font-size: 16px; border-radius: 6px; min-height: 48px;
+}
+#name-submit:active { background: rgba(255,215,0,0.4); }
 </style>
 </head>
 <body>
@@ -93,6 +121,14 @@ canvas:focus { outline: 3px solid #FFD700; outline-offset: 2px; }
     <button class="m-btn" id="btn-down" aria-label="Move down one lane">▼ DN</button>
   </div>
 </div>
+<div id="name-overlay" role="dialog" aria-modal="true" aria-label="Enter your name for the high score board">
+  <h2>&#9733; HIGH SCORE! &#9733;</h2>
+  <p>Enter your name (up to 7 characters)</p>
+  <input id="name-input" type="text" maxlength="7"
+    autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+    aria-label="Your name for the leaderboard">
+  <button id="name-submit">OK &#9654;</button>
+</div>
 <script>
 // ============================================================
 //  BARNEY'S BINS — THE RUBBISH RUN!
@@ -103,6 +139,40 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 const W = 800, H = 450;
 const P = 3;
+
+// ==================== LEADERBOARD ====================
+const MAX_SCORES = 7;
+let leaderboard = [];
+function loadLeaderboard() {
+  try { leaderboard = JSON.parse(localStorage.getItem('barneysBinsScores') || '[]'); } catch(e) { leaderboard = []; }
+}
+function saveLeaderboard() {
+  try { localStorage.setItem('barneysBinsScores', JSON.stringify(leaderboard)); } catch(e) {}
+}
+function addToLeaderboard(name, s) {
+  leaderboard.push({ name: (name.trim().toUpperCase().slice(0,7)) || 'PLAYER', score: s });
+  leaderboard.sort((a,b) => b.score - a.score);
+  leaderboard = leaderboard.slice(0, MAX_SCORES);
+  saveLeaderboard();
+}
+function qualifiesForBoard(s) {
+  return s > 0 && (leaderboard.length < MAX_SCORES || s > leaderboard[leaderboard.length-1].score);
+}
+function showNameEntry(onDone) {
+  const overlay = document.getElementById('name-overlay');
+  const inp = document.getElementById('name-input');
+  const btn = document.getElementById('name-submit');
+  inp.value = '';
+  overlay.classList.add('visible');
+  setTimeout(() => inp.focus(), 150);
+  function submit() {
+    overlay.classList.remove('visible');
+    onDone(inp.value);
+  }
+  btn.onclick = submit;
+  inp.onkeydown = e => { if (e.key === 'Enter') submit(); };
+}
+loadLeaderboard();
 
 // ==================== COLOUR PALETTE ====================
 const COL = {
@@ -380,7 +450,15 @@ function drawSprite(spr, x, y, scale, flipX) {
 let audioCtx = null;
 function ensureAudio() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+    // Play a zero-length silent buffer — required to unlock audio on iOS Safari
+    try {
+      const buf = audioCtx.createBuffer(1, 1, 22050);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf; src.connect(audioCtx.destination); src.start(0);
+    } catch(e) {}
+  }
 }
 function playTone(freq, dur, type, vol) {
   if (!audioCtx) return;
@@ -882,14 +960,17 @@ function spawnEntity() {
 
 // ==================== COLLISION ====================
 function checkCollisions() {
-  if (invTimer > 0) return;
   const wagLeft = WAGON_X-95, wagRight = WAGON_X+75;
-  obstacles.forEach(obs => {
-    if (!obs.active || obs.dodging) return;
-    if (obs.lane!==barneyLane && obs.lane!==barneyTargetLane) return;
-    if (obs.x<wagLeft || obs.x>wagRight) return;
-    handleObstacleHit(obs);
-  });
+  // Obstacles: only dangerous when NOT invincible
+  if (invTimer <= 0) {
+    obstacles.forEach(obs => {
+      if (!obs.active || obs.dodging) return;
+      if (obs.lane!==barneyLane && obs.lane!==barneyTargetLane) return;
+      if (obs.x<wagLeft || obs.x>wagRight) return;
+      handleObstacleHit(obs);
+    });
+  }
+  // Collectibles: always collected, even during coffee invincibility
   collectibles.forEach(col => {
     if (!col.active) return;
     if (col.lane!==barneyLane && col.lane!==barneyTargetLane) return;
@@ -904,7 +985,13 @@ function handleObstacleHit(obs) {
     if (score>hiScore) hiScore=score;
     sfxGameOver();
     announceStatus('Game over! Final score: '+score+'. Press Enter or Space to try again.');
-    state='gameover'; return;
+    if (qualifiesForBoard(score)) {
+      state = 'gameover';
+      showNameEntry(function(name) { addToLeaderboard(name, score); });
+    } else {
+      state = 'gameover';
+    }
+    return;
   }
   invTimer=HIT_COOL; flashTimer=20;
   wagonBounce=(obs.type==='pothole')?12:0;
@@ -1056,21 +1143,40 @@ function drawMenu() {
   ctx.fillText('▲ ▼ / W S = Lane    SPACE = Honk    ENTER = Start',168,340);
   ctx.fillStyle=COL.uiGreen; ctx.font='bold 16px Courier New';
   if (Math.floor(frameCount/30)%2===0) ctx.fillText('>>> PRESS ENTER, SPACE OR TAP TO START <<<',130,378);
-  if (hiScore>0) { ctx.fillStyle='#FF8A65'; ctx.font='bold 14px Courier New'; ctx.fillText(`BEST: ${hiScore}`,360,58); }
+  const topEntry = leaderboard[0];
+  if (topEntry) { ctx.fillStyle='#FF8A65'; ctx.font='bold 14px Courier New'; ctx.fillText(`★ BEST: ${topEntry.name} ${String(topEntry.score).padStart(7,'0')}`,230,58); }
+  else if (hiScore>0) { ctx.fillStyle='#FF8A65'; ctx.font='bold 14px Courier New'; ctx.fillText(`BEST: ${hiScore}`,360,58); }
 }
 
 function drawGameOver() {
   draw();
-  ctx.fillStyle='rgba(0,0,0,0.8)'; ctx.fillRect(150,100,500,280);
-  ctx.fillStyle=COL.uiRed; ctx.fillRect(150,100,500,6); ctx.fillRect(150,374,500,6);
-  ctx.fillStyle=COL.uiRed; ctx.font='bold 40px Courier New'; ctx.fillText('GAME OVER!',210,175);
-  drawSprite(S_BARNEY_OOF,330,185,1.2);
-  ctx.fillStyle=COL.uiGold; ctx.font='bold 22px Courier New';
-  ctx.fillText(`SCORE: ${String(score).padStart(7,'0')}`,235,280);
-  if (score>=hiScore) { ctx.fillStyle='#FF8A65'; ctx.font='bold 16px Courier New'; ctx.fillText('*** NEW BEST! ***',295,310); }
-  else { ctx.fillStyle='#90A4AE'; ctx.font='bold 14px Courier New'; ctx.fillText(`BEST: ${String(hiScore).padStart(7,'0')}`,305,310); }
-  ctx.fillStyle=COL.uiGreen; ctx.font='bold 16px Courier New';
-  if (Math.floor(frameCount/25)%2===0) ctx.fillText('PRESS ENTER, SPACE OR TAP TO TRY AGAIN',160,355);
+  // Background panel — taller to fit leaderboard
+  ctx.fillStyle='rgba(0,0,0,0.85)'; ctx.fillRect(130,60,540,340);
+  ctx.fillStyle=COL.uiRed; ctx.fillRect(130,60,540,5); ctx.fillRect(130,395,540,5);
+  // Title + sprite
+  ctx.fillStyle=COL.uiRed; ctx.font='bold 38px Courier New'; ctx.fillText('GAME OVER!',205,120);
+  drawSprite(S_BARNEY_OOF, 600, 68, 1.1);
+  // Score
+  ctx.fillStyle=COL.uiGold; ctx.font='bold 20px Courier New';
+  ctx.fillText(`YOUR SCORE: ${String(score).padStart(7,'0')}`, 195, 160);
+  if (score>0 && score>=hiScore) { ctx.fillStyle='#FF8A65'; ctx.font='bold 14px Courier New'; ctx.fillText('★ NEW PERSONAL BEST! ★', 250, 183); }
+  // Leaderboard
+  ctx.fillStyle='#80CBC4'; ctx.font='bold 13px Courier New';
+  ctx.fillText('─── HIGH SCORES ───', 270, 210);
+  if (leaderboard.length === 0) {
+    ctx.fillStyle='#666'; ctx.font='13px Courier New'; ctx.fillText('No scores yet — be the first!', 235, 235);
+  } else {
+    leaderboard.forEach(function(entry, i) {
+      const highlight = entry.score === score;
+      ctx.fillStyle = highlight ? COL.uiGold : (i===0 ? '#FF8A65' : '#B0BEC5');
+      ctx.font = (highlight ? 'bold' : '') + ' 13px Courier New';
+      const medal = i===0 ? '★' : (i===1 ? '✦' : (i===2 ? '•' : ' '));
+      ctx.fillText(medal+' '+(i+1)+'. '+entry.name.padEnd(7)+' '+String(entry.score).padStart(7,'0'), 218, 232 + i*22);
+    });
+  }
+  // Restart prompt
+  ctx.fillStyle=COL.uiGreen; ctx.font='bold 15px Courier New';
+  if (Math.floor(frameCount/25)%2===0) ctx.fillText('PRESS ENTER, SPACE OR TAP TO PLAY AGAIN', 152, 378);
 }
 
 // ==================== GAME CONTROL ====================
@@ -1139,8 +1245,32 @@ function loop() {
 // ==================== INIT ====================
 // Explicitly set canvas height from its rendered width (fallback for browsers
 // where height:auto on <canvas> doesn't honour the intrinsic 800:450 ratio)
+const wrap = document.getElementById('wrap');
 function fixCanvasHeight() {
-  canvas.style.height = Math.round(canvas.offsetWidth * 9 / 16) + 'px';
+  const portrait = window.innerHeight > window.innerWidth && 'ontouchstart' in window;
+  if (portrait) {
+    // Rotate the entire game area so it appears landscape on portrait phones
+    // maxW = the largest game width that fits once rotated into portrait viewport
+    const maxW = Math.min(window.innerHeight, window.innerWidth * 16 / 9);
+    const gameH = Math.round(maxW * 9 / 16);
+    wrap.style.position = 'fixed';
+    wrap.style.left = '50%';
+    wrap.style.top = '50%';
+    wrap.style.maxWidth = 'none';
+    wrap.style.width = Math.floor(maxW) + 'px';
+    wrap.style.transform = 'translate(-50%, -50%) rotate(-90deg)';
+    canvas.style.width = '100%';
+    canvas.style.height = gameH + 'px';
+  } else {
+    wrap.style.position = '';
+    wrap.style.left = '';
+    wrap.style.top = '';
+    wrap.style.maxWidth = '800px';
+    wrap.style.width = '';
+    wrap.style.transform = '';
+    canvas.style.width = '100%';
+    canvas.style.height = Math.round(canvas.offsetWidth * 9 / 16) + 'px';
+  }
 }
 window.addEventListener('resize', fixCanvasHeight);
 window.addEventListener('orientationchange', function () { setTimeout(fixCanvasHeight, 200); });
