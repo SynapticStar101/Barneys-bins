@@ -142,22 +142,88 @@ const P = 3;
 
 // ==================== LEADERBOARD ====================
 const MAX_SCORES = 7;
+
+// ── Supabase global leaderboard ──────────────────────────────────
+// Setup (free, 2 min):
+//  1. Create a project at https://supabase.com
+//  2. Open the SQL Editor inside your project and run:
+//       create table scores (
+//         id bigserial primary key,
+//         name text not null,
+//         score integer not null,
+//         created_at timestamptz default now()
+//       );
+//       alter table scores enable row level security;
+//       create policy "read"   on scores for select using (true);
+//       create policy "insert" on scores for insert with check (score >= 0 and length(name) <= 7);
+//  3. Go to Settings → API, copy your Project URL and anon public key
+//  4. Paste them in the two lines below and push to GitHub
+const SUPABASE_URL = 'YOUR_SUPABASE_PROJECT_URL';  // e.g. https://abcxyz.supabase.co
+const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';     // long string starting with eyJ...
+const SUPABASE_ON  = SUPABASE_URL !== 'YOUR_SUPABASE_PROJECT_URL';
+// ─────────────────────────────────────────────────────────────────
+
 let leaderboard = [];
+
 function loadLeaderboard() {
   try { leaderboard = JSON.parse(localStorage.getItem('barneysBinsScores') || '[]'); } catch(e) { leaderboard = []; }
 }
 function saveLeaderboard() {
   try { localStorage.setItem('barneysBinsScores', JSON.stringify(leaderboard)); } catch(e) {}
 }
+
+async function fetchGlobalLeaderboard() {
+  if (!SUPABASE_ON) return;
+  try {
+    const res = await fetch(
+      SUPABASE_URL + '/rest/v1/scores?select=name,score&order=score.desc&limit=' + MAX_SCORES,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+    );
+    if (res.ok) { leaderboard = await res.json(); saveLeaderboard(); }
+  } catch(e) {}
+}
+
+async function submitScore(name, s) {
+  if (!SUPABASE_ON) return;
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/scores', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ name: name, score: s })
+    });
+    await fetchGlobalLeaderboard();
+  } catch(e) {}
+}
+
 function addToLeaderboard(name, s) {
-  leaderboard.push({ name: (name.trim().toUpperCase().slice(0,7)) || 'PLAYER', score: s });
-  leaderboard.sort((a,b) => b.score - a.score);
-  leaderboard = leaderboard.slice(0, MAX_SCORES);
-  saveLeaderboard();
+  const clean = (name.trim().toUpperCase().slice(0, 7)) || 'PLAYER';
+  if (SUPABASE_ON) {
+    // Optimistically show locally, then sync from server after submit
+    leaderboard.push({ name: clean, score: s });
+    leaderboard.sort((a, b) => b.score - a.score);
+    leaderboard = leaderboard.slice(0, MAX_SCORES);
+    saveLeaderboard();
+    submitScore(clean, s); // async — refreshes leaderboard when done
+  } else {
+    leaderboard.push({ name: clean, score: s });
+    leaderboard.sort((a, b) => b.score - a.score);
+    leaderboard = leaderboard.slice(0, MAX_SCORES);
+    saveLeaderboard();
+  }
 }
+
+// With a global board every score > 0 qualifies (server holds all-time records).
+// Without Supabase, only top-7 local scores qualify.
 function qualifiesForBoard(s) {
-  return s > 0 && (leaderboard.length < MAX_SCORES || s > leaderboard[leaderboard.length-1].score);
+  if (SUPABASE_ON) return s > 0;
+  return s > 0 && (leaderboard.length < MAX_SCORES || s > leaderboard[leaderboard.length - 1].score);
 }
+
 function showNameEntry(onDone) {
   const overlay = document.getElementById('name-overlay');
   const inp = document.getElementById('name-input');
@@ -172,7 +238,9 @@ function showNameEntry(onDone) {
   btn.onclick = submit;
   inp.onkeydown = e => { if (e.key === 'Enter') submit(); };
 }
-loadLeaderboard();
+
+loadLeaderboard();        // load cached scores instantly
+fetchGlobalLeaderboard(); // update from server in background
 
 // ==================== COLOUR PALETTE ====================
 const COL = {
@@ -1162,7 +1230,8 @@ function drawGameOver() {
   if (score>0 && score>=hiScore) { ctx.fillStyle='#FF8A65'; ctx.font='bold 14px Courier New'; ctx.fillText('★ NEW PERSONAL BEST! ★', 250, 183); }
   // Leaderboard
   ctx.fillStyle='#80CBC4'; ctx.font='bold 13px Courier New';
-  ctx.fillText('─── HIGH SCORES ───', 270, 210);
+  const boardLabel = SUPABASE_ON ? '─── GLOBAL HIGH SCORES ───' : '─── HIGH SCORES ───';
+  ctx.fillText(boardLabel, SUPABASE_ON ? 238 : 270, 210);
   if (leaderboard.length === 0) {
     ctx.fillStyle='#666'; ctx.font='13px Courier New'; ctx.fillText('No scores yet — be the first!', 235, 235);
   } else {
