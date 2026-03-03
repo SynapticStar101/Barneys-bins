@@ -1620,9 +1620,16 @@
       const vp = window.visualViewport;
       const vw = Math.floor(vp ? vp.width  : window.innerWidth);
       const vh = Math.floor(vp ? vp.height : window.innerHeight);
-      // Constrain by BOTH width and height in all orientations — no rotation needed.
-      // This keeps all 3 lanes visible whether portrait or landscape.
-      const w = Math.min(vw, 800, Math.floor(vh * 16 / 9));
+
+      // Subtract the mobile controls bar height so canvas + buttons both fit on screen.
+      // getBoundingClientRect().height is 0 when display:none (desktop), positive on mobile.
+      const ctrl = document.getElementById('mobile-controls');
+      const ctrlH = ctrl ? Math.ceil(ctrl.getBoundingClientRect().height) : 0;
+
+      // Also account for the 4px top + 4px bottom canvas border
+      const availH = vh - ctrlH - 8;
+
+      const w = Math.min(vw, 800, Math.floor(availH * 16 / 9));
       wrap.style.position  = '';
       wrap.style.left      = '';
       wrap.style.top       = '';
