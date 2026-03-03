@@ -645,6 +645,90 @@
       [330, 392, 494, 587, 698, 784].forEach((f, i) => setTimeout(() => playTone(f, 0.07, 'square', 0.09), i * 45));
     }
 
+    // ==================== BACKGROUND MUSIC ====================
+    let bgMusicTimer = null;
+    let bgMusicId    = null;
+
+    function _mn(freq, t, dur, type, vol) {           // schedule one note
+      if (!audioCtx || freq <= 0) return;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.018);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.80);
+      o.start(t); o.stop(t + dur);
+    }
+
+    function stopBgMusic() {
+      clearTimeout(bgMusicTimer); bgMusicTimer = null; bgMusicId = null;
+    }
+
+    function startBgMusic(id, trackFn) {
+      if (bgMusicId === id) return;          // already playing this track
+      stopBgMusic();
+      if (!audioCtx) return;
+      bgMusicId = id;
+      (function tick() {
+        if (bgMusicId !== id) return;
+        const dur = trackFn(audioCtx.currentTime + 0.08);
+        bgMusicTimer = setTimeout(tick, Math.max(0, (dur - 0.12) * 1000));
+      })();
+    }
+
+    // ── MENU TUNE  — funky upbeat chip-tune in C major, 155 BPM ──────────────
+    function menuTrack(t0) {
+      const Q = 60 / 155;   // quarter-note duration in seconds
+      // Lead melody  [freq Hz, quarter-note beats]
+      const mel = [
+        [523.25,0.5],[659.25,0.5],[783.99,1],[880,0.5],[783.99,0.5],   // C5 E5 G5 A5 G5
+        [659.25,0.5],[523.25,0.5],[587.33,1],[659.25,0.5],[523.25,0.5],// E5 C5 D5 E5 C5
+        [392,0.5],[440,0.5],[523.25,1],[659.25,0.5],[783.99,0.5],      // G4 A4 C5 E5 G5
+        [880,1],[783.99,0.5],[659.25,0.5],[523.25,2],                  // A5 G5 E5 C5(half)
+        [659.25,0.5],[783.99,0.5],[880,1],[783.99,0.5],[659.25,0.5],   // E5 G5 A5 G5 E5
+        [523.25,0.5],[659.25,0.5],[783.99,1],[659.25,0.5],[523.25,0.5],// C5 E5 G5 E5 C5
+        [440,0.5],[523.25,0.5],[659.25,0.5],[523.25,0.5],[440,0.5],[392,0.5], // A4..G4
+        [523.25,3],[0,1]                                               // C5 dotted-half, rest
+      ];
+      // Bass line  [freq Hz, beats]
+      const bass = [
+        [130.81,2],[146.83,2],[130.81,2],[146.83,2],  // C3 D3 C3 D3
+        [174.61,2],[130.81,2],[164.81,2],[130.81,2],  // F3 C3 E3 C3  (chords 5–8)
+        [130.81,2],[146.83,2],[130.81,2],[174.61,2],  // C3 D3 C3 F3
+        [196,2],[164.81,2],[130.81,4]                 // G3 E3 C3(half)
+      ];
+      let t = t0, total = 0;
+      mel.forEach(([f, b])  => { _mn(f, t, b*Q*0.78, 'square',   0.09); t += b*Q; total += b*Q; });
+      t = t0;
+      bass.forEach(([f, b]) => { _mn(f, t, b*Q*0.65, 'triangle', 0.13); t += b*Q; });
+      return total;
+    }
+
+    // ── GAME OVER TUNE — cheerful major-key loop, 148 BPM ────────────────────
+    function gameOverTrack(t0) {
+      const Q = 60 / 148;
+      const mel = [
+        [523.25,0.5],[659.25,0.5],[783.99,0.5],[880,0.5],    // C5 E5 G5 A5
+        [1046.5,1.5],[880,0.5],[783.99,1],                    // C6 A5 G5
+        [659.25,0.5],[783.99,0.5],[880,0.5],[783.99,0.5],    // E5 G5 A5 G5
+        [659.25,2],[0,1],                                     // E5(half) rest
+        [880,0.5],[783.99,0.5],[659.25,0.5],[523.25,0.5],    // A5 G5 E5 C5
+        [587.33,1.5],[659.25,0.5],[523.25,1],                 // D5 E5 C5
+        [440,0.5],[523.25,0.5],[659.25,0.5],[783.99,0.5],    // A4 C5 E5 G5
+        [523.25,3],[0,1]                                      // C5 dotted-half, rest
+      ];
+      const bass = [
+        [130.81,2],[196,2],[130.81,2],[196,2],  // C3 G3 C3 G3
+        [196,2],[130.81,2],[174.61,2],[130.81,2] // G3 C3 F3 C3
+      ];
+      let t = t0, total = 0;
+      mel.forEach(([f, b])  => { _mn(f, t, b*Q*0.80, 'square',   0.09); t += b*Q; total += b*Q; });
+      t = t0;
+      bass.forEach(([f, b]) => { _mn(f, t, b*Q*0.65, 'triangle', 0.12); t += b*Q; });
+      return total;
+    }
+
     // ==================== ACCESSIBILITY HELPER ====================
     function announceStatus(msg) {
       const el = document.getElementById('game-status');
@@ -1303,7 +1387,8 @@
       ctx.fillStyle = '#80CBC4'; ctx.font = '13px Courier New';
       ctx.fillText('▲ ▼ / W S = Lane    SPACE = Honk    ENTER = Start', 168, 340);
       ctx.fillStyle = COL.uiGreen; ctx.font = 'bold 16px Courier New';
-      if (Math.floor(frameCount / 30) % 2 === 0) ctx.fillText('>>> PRESS ENTER, SPACE OR TAP TO START <<<', 130, 378);
+      const startPrompt = hiScore > 0 ? '>>> TAP TO PLAY AGAIN <<<' : '>>> PRESS ENTER, SPACE OR TAP TO START <<<';
+      if (Math.floor(frameCount / 30) % 2 === 0) ctx.fillText(startPrompt, hiScore > 0 ? 238 : 130, 378);
       const topEntry = leaderboard[0];
       if (topEntry) { ctx.fillStyle = '#FF8A65'; ctx.font = 'bold 14px Courier New'; ctx.fillText(`★ BEST: ${topEntry.name} ${String(topEntry.score).padStart(7, '0')}`, 230, 58); }
       else if (hiScore > 0) { ctx.fillStyle = '#FF8A65'; ctx.font = 'bold 14px Courier New'; ctx.fillText(`BEST: ${hiScore}`, 360, 58); }
@@ -1365,13 +1450,22 @@
         if ((e.code === 'ArrowUp' || e.code === 'KeyW') && barneyTargetLane > 0) barneyTargetLane--;
         if ((e.code === 'ArrowDown' || e.code === 'KeyS') && barneyTargetLane < 2) barneyTargetLane++;
         if (e.code === 'Space' || e.code === 'KeyH') { if (honkTimer <= 0) { sfxHonk(); honkTimer = 45; honkNearby(); } }
-      } else { if (e.code === 'Enter' || e.code === 'Space') startGame(); }
+      } else if (e.code === 'Enter' || e.code === 'Space') {
+        ensureAudio();
+        if (state === 'gameover') state = 'menu';
+        else if (state === 'menu') startGame();
+      }
       if (['ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
     });
     document.addEventListener('keyup', e => { keys[e.code] = false; });
 
     let touchStartY = 0;
-    canvas.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; ensureAudio(); if (state !== 'playing') startGame(); e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('touchstart', e => {
+      touchStartY = e.touches[0].clientY; ensureAudio();
+      if (state === 'gameover') state = 'menu';
+      else if (state === 'menu') startGame();
+      e.preventDefault();
+    }, { passive: false });
     canvas.addEventListener('touchend', e => {
       const dy = e.changedTouches[0].clientY - touchStartY;
       if (state === 'playing') {
@@ -1386,9 +1480,10 @@
     function setupMobileButtons() {
       const btnUp = document.getElementById('btn-up'), btnDown = document.getElementById('btn-down'), btnHonk = document.getElementById('btn-honk');
       if (!btnUp) return;
-      const onUp = e => { e.preventDefault(); ensureAudio(); if (state === 'playing') { if (barneyTargetLane > 0) barneyTargetLane--; } else startGame(); };
-      const onDown = e => { e.preventDefault(); ensureAudio(); if (state === 'playing') { if (barneyTargetLane < 2) barneyTargetLane++; } else startGame(); };
-      const onHonk = e => { e.preventDefault(); ensureAudio(); if (state === 'playing') { if (honkTimer <= 0) { sfxHonk(); honkTimer = 45; honkNearby(); } } else startGame(); };
+      function advanceState() { ensureAudio(); if (state === 'gameover') state = 'menu'; else if (state === 'menu') startGame(); }
+      const onUp   = e => { e.preventDefault(); ensureAudio(); if (state === 'playing') { if (barneyTargetLane > 0) barneyTargetLane--; } else advanceState(); };
+      const onDown = e => { e.preventDefault(); ensureAudio(); if (state === 'playing') { if (barneyTargetLane < 2) barneyTargetLane++; } else advanceState(); };
+      const onHonk = e => { e.preventDefault(); ensureAudio(); if (state === 'playing') { if (honkTimer <= 0) { sfxHonk(); honkTimer = 45; honkNearby(); } } else advanceState(); };
       btnUp.addEventListener('touchstart', onUp, { passive: false }); btnUp.addEventListener('mousedown', onUp);
       btnDown.addEventListener('touchstart', onDown, { passive: false }); btnDown.addEventListener('mousedown', onDown);
       btnHonk.addEventListener('touchstart', onHonk, { passive: false }); btnHonk.addEventListener('mousedown', onHonk);
@@ -1396,8 +1491,16 @@
     setupMobileButtons();
 
     // ==================== GAME LOOP ====================
+    let prevState = null;
     function loop() {
       frameCount++;
+      // Trigger music on state change
+      if (state !== prevState) {
+        if      (state === 'menu')     startBgMusic('menu',     menuTrack);
+        else if (state === 'gameover') startBgMusic('gameover', gameOverTrack);
+        else if (state === 'playing')  stopBgMusic();
+        prevState = state;
+      }
       if (state === 'menu') { bgScroll += 0.5; drawMenu(); }
       else if (state === 'playing') { update(); draw(); }
       else if (state === 'gameover') { bgScroll += 0.2; drawGameOver(); }
