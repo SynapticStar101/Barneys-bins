@@ -791,6 +791,7 @@
     let coffeeTimer = 0;      // frames remaining for coffee power-up
     let bonusRound = false;           // true during level 4 bonus round
     let hyperSpeedAwarded = false;    // one-time +1000 pts at level 9
+    let distScoreTimer = 0;           // accumulates dt for per-second distance score
     let scorePopups = [];
     let obstacles = [], collectibles = [], particles = [];
     let clouds = [];
@@ -820,7 +821,9 @@
       for (let i = 0; i < 6; i++)
         clouds.push({ x: Math.random() * W, y: 20 + Math.random() * 70, w: 60 + Math.random() * 80, speed: 0.2 + Math.random() * 0.3 });
     }
+    let _cloudDt = 1; // set by draw()/drawMenu() before clouds
     function drawClouds() {
+      const dt = _cloudDt;
       clouds.forEach(cl => {
         ctx.fillStyle = COL.cloud;
         ctx.fillRect(cl.x, cl.y, cl.w, 18);
@@ -828,7 +831,7 @@
         ctx.fillRect(cl.x + cl.w - 30, cl.y - 8, 30, 12);
         ctx.fillStyle = COL.cloudDk;
         ctx.fillRect(cl.x, cl.y + 12, cl.w, 6);
-        cl.x -= cl.speed;
+        cl.x -= cl.speed * dt;
         if (cl.x < -cl.w - 20) cl.x = W + 20;
       });
     }
@@ -1116,11 +1119,14 @@
         particles.push({ type: 'star', x, y, vx: Math.cos(a) * (2 + Math.random() * 3), vy: Math.sin(a) * (2 + Math.random() * 3) - 1.5, life: 35 + Math.random() * 15, maxLife: 50, col: ['#FFD700', '#FF8F00', '#FFFFFF'][Math.floor(Math.random() * 3)] });
       }
     }
+    let _particleDt = 1; // set by draw() before particle update
     function updateAndDrawParticles() {
+      const dt = _particleDt;
       particles = particles.filter(p => p.life > 0);
       particles.forEach(p => {
-        const alpha = p.life / p.maxLife;
-        p.x += p.vx; p.y += p.vy; p.life--;
+        p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+        p.vx *= Math.pow(0.97, dt); p.vy *= Math.pow(0.97, dt);
+        const alpha = Math.max(0, p.life / p.maxLife);
         if (p.type === 'smoke') {
           ctx.fillStyle = `rgba(176,190,197,${alpha * 0.5})`;
           const s = p.size * (1.5 - alpha); ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
@@ -1128,18 +1134,19 @@
           ctx.fillStyle = p.col; ctx.globalAlpha = alpha;
           ctx.fillRect(p.x - 3, p.y - 3, 6, 6); ctx.globalAlpha = 1;
         }
-        p.vx *= 0.97; p.vy *= 0.97;
       });
     }
     function spawnScorePopup(x, y, text, col) {
       scorePopups.push({ x, y, text, col: col || COL.uiGold, life: 60 });
     }
+    let _popupDt = 1; // set by draw() before popup update
     function updateDrawPopups() {
+      const dt = _popupDt;
       scorePopups = scorePopups.filter(p => p.life > 0);
       scorePopups.forEach(p => {
-        ctx.globalAlpha = p.life / 60; ctx.fillStyle = p.col;
+        ctx.globalAlpha = Math.max(0, p.life / 60); ctx.fillStyle = p.col;
         ctx.font = 'bold 16px Courier New'; ctx.fillText(p.text, p.x, p.y);
-        p.y -= 0.8; p.life--; ctx.globalAlpha = 1;
+        p.y -= 0.8 * dt; p.life -= dt; ctx.globalAlpha = 1;
       });
     }
 
@@ -1342,39 +1349,44 @@
     }
 
     // ==================== UPDATE ====================
-    function update() {
-      bgScroll += speed * speedMult * 0.5;
-      roadScroll += speed * speedMult;
-      exhaustTimer--;
+    function update(dt) {
+      bgScroll += speed * speedMult * 0.5 * dt;
+      roadScroll += speed * speedMult * dt;
+      exhaustTimer -= dt;
 
-      // Lane lerp
+      // Lane lerp — framerate-correct exponential decay
       const targetY = LANE_Y[barneyTargetLane];
-      barneyY += (targetY - barneyY) * 0.15;
+      barneyY += (targetY - barneyY) * (1 - Math.pow(0.85, dt));
       if (Math.abs(barneyY - targetY) < 1) { barneyY = targetY; barneyLane = barneyTargetLane; }
 
       // Bounce decay
-      if (wagonBounce > 0) wagonBounce = Math.max(0, wagonBounce - 1.5);
+      if (wagonBounce > 0) wagonBounce = Math.max(0, wagonBounce - 1.5 * dt);
 
       // Face management
-      if (barneyFaceTimer > 0) { barneyFaceTimer--; if (barneyFaceTimer === 0) barneyFace = 'normal'; }
-      blinkTimer--;
+      if (barneyFaceTimer > 0) {
+        barneyFaceTimer -= dt;
+        if (barneyFaceTimer <= 0) { barneyFaceTimer = 0; barneyFace = 'normal'; }
+      }
+      blinkTimer -= dt;
       if (blinkTimer <= 0) { barneyFace = 'blink'; barneyFaceTimer = 8; blinkTimer = 180 + Math.floor(Math.random() * 120); }
 
-      if (invTimer > 0) invTimer--;
-      if (honkTimer > 0) honkTimer--;
+      if (invTimer > 0) invTimer -= dt;
+      if (honkTimer > 0) honkTimer -= dt;
 
       // Coffee power-up countdown
       if (coffeeTimer > 0) {
-        coffeeTimer--;
-        invTimer = Math.max(invTimer, 1); // stay invulnerable for full duration
-        if (coffeeTimer === 0) {
+        coffeeTimer -= dt;
+        invTimer = Math.max(invTimer, dt); // stay invulnerable for full duration
+        if (coffeeTimer <= 0) {
+          coffeeTimer = 0;
           speedMult = 1;
           announceStatus('Speed boost ended.');
         }
       }
 
-      // Distance score
-      if (frameCount % 60 === 0) score += level;
+      // Distance score — accumulate dt, trigger once per 60 "frames" (1 real second)
+      distScoreTimer += dt;
+      if (distScoreTimer >= 60) { distScoreTimer -= 60; score += level; if (score > hiScore) hiScore = score; }
 
       // Level up every 30 seconds (1800 frames at 60fps), max level 9
       const newLevel = Math.min(9, 1 + Math.floor(frameCount / 1800));
@@ -1405,15 +1417,15 @@
       }
 
       // Spawn
-      nextSpawn--;
+      nextSpawn -= dt;
       if (nextSpawn <= 0) { spawnEntity(); nextSpawn = getSpawnInterval() + Math.floor(Math.random() * 20); }
 
       // Move entities
       obstacles.forEach(o => {
-        o.x -= speed * speedMult; o.frame++;
-        if (o.dodging) { o.y += o.dodgeVy; if (o.y < ROAD_TOP - 70) o.active = false; }
+        o.x -= speed * speedMult * dt; o.frame += dt;
+        if (o.dodging) { o.y += o.dodgeVy * dt; if (o.y < ROAD_TOP - 70) o.active = false; }
       });
-      collectibles.forEach(c => { c.x -= speed * speedMult; c.frame++; });
+      collectibles.forEach(c => { c.x -= speed * speedMult * dt; c.frame += dt; });
       obstacles = obstacles.filter(o => o.x > -200 && o.active);
       collectibles = collectibles.filter(c => c.x > -200 && c.active);
 
@@ -1518,7 +1530,7 @@
       state = 'playing';
       score = 0; lives = 3; level = 1;
       speed = 3.0; speedMult = 1; coffeeTimer = 0;
-      bonusRound = false; hyperSpeedAwarded = false;
+      bonusRound = false; hyperSpeedAwarded = false; distScoreTimer = 0;
       barneyLane = 1; barneyTargetLane = 1; barneyY = LANE_Y[1];
       obstacles = []; collectibles = []; particles = []; scorePopups = [];
       nextSpawn = 80; invTimer = 0; flashTimer = 0; wagonBounce = 0;
@@ -1579,8 +1591,12 @@
 
     // ==================== GAME LOOP ====================
     let prevState = null;
-    function loop() {
-      frameCount++;
+    let lastTime = 0;
+    function loop(ts) {
+      // dt = elapsed frames at 60fps; capped at 3 to absorb tab-switch spikes
+      const dt = lastTime ? Math.min((ts - lastTime) / 16.667, 3) : 1;
+      lastTime = ts;
+      frameCount += dt;
       // Trigger music on state change
       if (state !== prevState) {
         if      (state === 'menu')     startBgMusic('menu',     menuTrack);
@@ -1588,9 +1604,10 @@
         else if (state === 'playing')  stopBgMusic();
         prevState = state;
       }
-      if (state === 'menu') { bgScroll += 0.5; drawMenu(); }
-      else if (state === 'playing') { update(); draw(); }
-      else if (state === 'gameover') { bgScroll += 0.2; drawGameOver(); }
+      _cloudDt = dt; _particleDt = dt; _popupDt = dt;
+      if (state === 'menu') { bgScroll += 0.5 * dt; drawMenu(); }
+      else if (state === 'playing') { update(dt); draw(); }
+      else if (state === 'gameover') { bgScroll += 0.2 * dt; drawGameOver(); }
       requestAnimationFrame(loop);
     }
 
