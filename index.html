@@ -124,12 +124,7 @@
       border: 0;
     }
 
-    /* Portrait auto-rotate */
-    @media (orientation: portrait) and (pointer: coarse) {
-      body {
-        overflow: hidden;
-      }
-    }
+
 
     /* Name-entry overlay */
     #name-overlay {
@@ -611,19 +606,30 @@
     // ==================== AUDIO ====================
     let audioCtx = null;
     function ensureAudio() {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume().catch(() => { });
-        // Play a zero-length silent buffer — required to unlock audio on iOS Safari
-        try {
-          const buf = audioCtx.createBuffer(1, 1, 22050);
-          const src = audioCtx.createBufferSource();
-          src.buffer = buf; src.connect(audioCtx.destination); src.start(0);
-        } catch (e) { }
+      if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return; }
+      }
+      if (audioCtx.state !== 'running') {
+        var p = audioCtx.resume();
+        if (p && typeof p.then === 'function') {
+          p.then(function() {
+            // Play a zero-length silent buffer after context is running — iOS Safari requires this
+            try {
+              var buf = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
+              var src = audioCtx.createBufferSource();
+              src.buffer = buf; src.connect(audioCtx.destination); src.start(0);
+            } catch(e) {}
+            // Re-trigger background music now that context is running
+            var id = bgMusicId;
+            bgMusicId = null;
+            if      (id === 'menu')     startBgMusic('menu',     menuTrack);
+            else if (id === 'gameover') startBgMusic('gameover', gameOverTrack);
+          }).catch(function() {});
+        }
       }
     }
     function playTone(freq, dur, type, vol) {
-      if (!audioCtx) return;
+      if (!audioCtx || audioCtx.state !== 'running') return;
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
       o.connect(g); g.connect(audioCtx.destination);
@@ -651,7 +657,7 @@
     let bgMusicId    = null;
 
     function _mn(freq, t, dur, type, vol) {           // schedule one note
-      if (!audioCtx || freq <= 0) return;
+      if (!audioCtx || audioCtx.state !== 'running' || freq <= 0) return;
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
       o.connect(g); g.connect(audioCtx.destination);
@@ -671,11 +677,19 @@
       stopBgMusic();
       if (!audioCtx) return;
       bgMusicId = id;
-      (function tick() {
+      function kick() {
         if (bgMusicId !== id) return;
-        const dur = trackFn(audioCtx.currentTime + 0.08);
-        bgMusicTimer = setTimeout(tick, Math.max(0, (dur - 0.12) * 1000));
-      })();
+        (function tick() {
+          if (bgMusicId !== id) return;
+          const dur = trackFn(audioCtx.currentTime + 0.08);
+          bgMusicTimer = setTimeout(tick, Math.max(0, (dur - 0.12) * 1000));
+        })();
+      }
+      if (audioCtx.state === 'running') {
+        kick();
+      } else {
+        audioCtx.resume().then(kick).catch(function() {});
+      }
     }
 
     // ── MENU TUNE  — funky upbeat chip-tune in C major, 155 BPM ──────────────
@@ -1522,40 +1536,20 @@
     function fixCanvasHeight() {
       // Use visualViewport when available — gives the true visible area on Android/iOS
       const vp = window.visualViewport;
-      const vw = vp ? vp.width  : window.innerWidth;
-      const vh = vp ? vp.height : window.innerHeight;
-      const portrait = vh > vw && 'ontouchstart' in window;
-      if (portrait) {
-        // Portrait phone: rotate wrap -90deg so game appears landscape
-        // maxW is the largest game width that fits once rotated into the portrait viewport:
-        //   visual width after rotation = maxW * 9/16, must fit within vw
-        //   visual height after rotation = maxW, must fit within vh
-        const maxW = Math.min(vh, Math.floor(vw * 16 / 9));
-        wrap.style.position = 'fixed';
-        wrap.style.left = '50%';
-        wrap.style.top = '50%';
-        wrap.style.maxWidth = 'none';
-        wrap.style.width = Math.floor(maxW) + 'px';
-        wrap.style.transform = 'translate(-50%, -50%) rotate(-90deg)';
-        canvas.style.width = '100%';
-        canvas.style.height = Math.round(maxW * 9 / 16) + 'px';
-        canvas.style.margin = '';
-      } else {
-        // Landscape: constrain by BOTH width and height so all lanes stay visible.
-        // On phones like Pixel 7 Pro, vh (~412px) is the tight limit, not vw.
-        const maxByWidth  = Math.min(vw, 800);
-        const maxByHeight = Math.floor(vh * 16 / 9); // widest canvas that keeps height <= vh
-        const w = Math.min(maxByWidth, maxByHeight);
-        wrap.style.position  = '';
-        wrap.style.left      = '';
-        wrap.style.top       = '';
-        wrap.style.maxWidth  = '800px';
-        wrap.style.width     = '';
-        wrap.style.transform = '';
-        canvas.style.width   = w + 'px';
-        canvas.style.height  = Math.round(w * 9 / 16) + 'px';
-        canvas.style.margin  = '0 auto'; // centre canvas when narrower than wrap
-      }
+      const vw = Math.floor(vp ? vp.width  : window.innerWidth);
+      const vh = Math.floor(vp ? vp.height : window.innerHeight);
+      // Constrain by BOTH width and height in all orientations — no rotation needed.
+      // This keeps all 3 lanes visible whether portrait or landscape.
+      const w = Math.min(vw, 800, Math.floor(vh * 16 / 9));
+      wrap.style.position  = '';
+      wrap.style.left      = '';
+      wrap.style.top       = '';
+      wrap.style.maxWidth  = '800px';
+      wrap.style.width     = '';
+      wrap.style.transform = '';
+      canvas.style.width   = w + 'px';
+      canvas.style.height  = Math.round(w * 9 / 16) + 'px';
+      canvas.style.margin  = '0 auto';
     }
     window.addEventListener('resize', fixCanvasHeight);
     // Fire twice on orientationchange: once early, once after iOS fully settles
