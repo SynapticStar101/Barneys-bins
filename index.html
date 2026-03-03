@@ -779,7 +779,7 @@
     let state = 'menu';
     let score = 0, lives = 3, level = 1, hiScore = 0;
     let frameCount = 0, bgScroll = 0, roadScroll = 0;
-    let speed = 3.0, speedMult = 1;   // slightly faster start than before
+    let speed = 5.0, speedMult = 1;
     let barneyLane = 1, barneyTargetLane = 1;
     let barneyY = LANE_Y[1];
     let invTimer = 0, flashTimer = 0;
@@ -1394,7 +1394,7 @@
         level = newLevel;
         bonusRound = (level === 4);
         if (level === 9) {
-          speed = 9;
+          speed = 14;
           sfxLevelUp();
           spawnScorePopup(W / 2 - 90, H / 2 - 14, 'HYPERSPEED!!', '#FFD700');
           spawnScorePopup(W / 2 - 90, H / 2 + 14, 'MAX SPEED! +1000', '#FF69B4');
@@ -1404,12 +1404,12 @@
           }
           announceStatus('HYPERSPEED! Maximum speed! +1000 bonus points!');
         } else if (bonusRound) {
-          speed = Math.min(8, 3.0 + (level - 1) * 0.6);
+          speed = Math.min(12, 5.0 + (level - 1) * 0.9);
           sfxLevelUp();
           spawnScorePopup(W / 2 - 75, H / 2, 'BONUS ROUND!', '#FF69B4');
           announceStatus('BONUS ROUND! Gold bins worth double points for 30 seconds!');
         } else {
-          speed = Math.min(8, 3.0 + (level - 1) * 0.6);
+          speed = Math.min(12, 5.0 + (level - 1) * 0.9);
           sfxLevelUp();
           spawnScorePopup(W / 2 - 60, H / 2, `LEVEL ${level}! FASTER!`, COL.uiGold);
           announceStatus('Level ' + level + '! Speed increasing.');
@@ -1529,7 +1529,7 @@
       ensureAudio();
       state = 'playing';
       score = 0; lives = 3; level = 1;
-      speed = 3.0; speedMult = 1; coffeeTimer = 0;
+      speed = 5.0; speedMult = 1; coffeeTimer = 0;
       bonusRound = false; hyperSpeedAwarded = false; distScoreTimer = 0;
       barneyLane = 1; barneyTargetLane = 1; barneyY = LANE_Y[1];
       obstacles = []; collectibles = []; particles = []; scorePopups = [];
