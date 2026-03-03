@@ -541,6 +541,12 @@
       ]
     };
 
+    // GOLD BONUS BIN (8w x 13h) — same shape as green bin, gold palette — 100 pts
+    const S_GOLD_BIN = {
+      pal: { 1: '#B8860B', 2: '#DAA520', 3: '#FFD700', 4: '#000000', 5: '#FFFDE7', 6: '#FFC107', 7: '#F9A825' },
+      d: S_BIN.d
+    };
+
     // ── COFFEE MUG (8w × 12h) — obvious hot mug with handle ──────────────────────
     const S_COFFEE = {
       pal: {
@@ -783,6 +789,8 @@
     let exhaustTimer = 0;
     let honkTimer = 0;
     let coffeeTimer = 0;      // frames remaining for coffee power-up
+    let bonusRound = false;           // true during level 4 bonus round
+    let hyperSpeedAwarded = false;    // one-time +1000 pts at level 9
     let scorePopups = [];
     let obstacles = [], collectibles = [], particles = [];
     let clouds = [];
@@ -1036,6 +1044,18 @@
       ctx.fillRect(x - 8, y - 24 + bob, 16, 5);
     }
 
+    function drawGoldBin(x, y, bob) {
+      drawSprite(S_GOLD_BIN, x - 12, y - 36 + bob, 1);
+      // Sparkling gold glow
+      ctx.fillStyle = 'rgba(255,215,0,0.28)';
+      ctx.fillRect(x - 16, y - 40 + bob, 32, 44);
+      // Shine glint
+      if (Math.floor(frameCount / 6) % 4 === 0) {
+        ctx.fillStyle = 'rgba(255,255,200,0.7)';
+        ctx.fillRect(x - 4, y - 34 + bob, 6, 3);
+      }
+    }
+
     function drawCoffeeCup(x, y, bob) {
       // Draw at scale 1.2 so it's obviously a mug (each sprite pixel = ~3.6 screen px)
       drawSprite(S_COFFEE, x - 15, y - 36 + bob, 1.2);
@@ -1134,14 +1154,28 @@
       ctx.font = 'bold 18px Courier New'; ctx.fillText(String(hiScore).padStart(7, '0'), 150, 34);
 
       // Level + time-to-next-level progress bar
-      ctx.fillStyle = '#80CBC4'; ctx.font = 'bold 14px Courier New'; ctx.fillText('LV ' + level, 316, 16);
-      const lvProg = (frameCount % 3600) / 3600;
+      const lvLabel = bonusRound ? 'BONUS' : (level === 9 ? 'MAX' : 'LV ' + level);
+      ctx.fillStyle = bonusRound ? '#FF69B4' : (level === 9 ? '#FFD700' : '#80CBC4');
+      ctx.font = 'bold 14px Courier New'; ctx.fillText(lvLabel, 316, 16);
+      const lvProg = level < 9 ? (frameCount % 1800) / 1800 : 1;
       ctx.fillStyle = '#333'; ctx.fillRect(316, 20, 62, 7);
-      ctx.fillStyle = lvProg > 0.8 ? '#FF8A65' : '#80CBC4';
+      ctx.fillStyle = bonusRound ? '#FF69B4' : (lvProg > 0.8 ? '#FF8A65' : '#80CBC4');
       ctx.fillRect(316, 20, Math.floor(62 * lvProg), 7);
-      const secsLeft = Math.ceil((3600 - frameCount % 3600) / 60);
-      ctx.fillStyle = '#80CBC4'; ctx.font = '11px Courier New';
-      ctx.fillText(secsLeft + 's', 324, 34);
+      if (level < 9) {
+        const secsLeft = Math.ceil((1800 - frameCount % 1800) / 60);
+        ctx.fillStyle = bonusRound ? '#FF69B4' : '#80CBC4'; ctx.font = '11px Courier New';
+        ctx.fillText(secsLeft + 's', 324, 34);
+      }
+      // Bonus round banner
+      if (bonusRound && Math.floor(frameCount / 15) % 2 === 0) {
+        ctx.fillStyle = '#FF69B4'; ctx.font = 'bold 18px Courier New';
+        ctx.fillText('★ BONUS ROUND ★', W / 2 - 90, H / 2 + 60);
+      }
+      // Hyperspeed banner
+      if (level === 9 && Math.floor(frameCount / 20) % 2 === 0) {
+        ctx.fillStyle = '#FFD700'; ctx.font = 'bold 16px Courier New';
+        ctx.fillText('⚡ HYPERSPEED ⚡', W / 2 - 84, H / 2 + 60);
+      }
 
       // Speed bar
       ctx.fillStyle = '#B0BEC5'; ctx.font = 'bold 12px Courier New'; ctx.fillText('SPEED', 400, 16);
@@ -1218,10 +1252,16 @@
         const ent = new Entity(type, lane, SPAWN_X);
         obstacles.push(ent);
       } else {
-        const cRoll = Math.random();
-        // Green bin 55%, coffee 20%, blue recycle bin 25%
-        const type = cRoll < 0.55 ? 'bin' : cRoll < 0.75 ? 'coffee' : 'bluebin';
-        collectibles.push(new Entity(type, lane, SPAWN_X));
+        if (bonusRound) {
+          // Bonus round: gold bins 75%, coffee 25%
+          const type = Math.random() < 0.75 ? 'goldbin' : 'coffee';
+          collectibles.push(new Entity(type, lane, SPAWN_X));
+        } else {
+          const cRoll = Math.random();
+          // Green bin 55%, coffee 20%, blue recycle bin 25%
+          const type = cRoll < 0.55 ? 'bin' : cRoll < 0.75 ? 'coffee' : 'bluebin';
+          collectibles.push(new Entity(type, lane, SPAWN_X));
+        }
       }
     }
 
@@ -1283,6 +1323,11 @@
         spawnScorePopup(col.x, col.y - 30, '+100 RECYCLE!', COL.uiBlue);
         sfxBonusCollect(); spawnCollectEffect(col.x, col.y, '#42A5F5');
       }
+      if (col.type === 'goldbin') {
+        score += 100; if (score > hiScore) hiScore = score;
+        spawnScorePopup(col.x, col.y - 30, '+100 GOLD!', '#FFD700');
+        sfxBonusCollect(); spawnCollectEffect(col.x, col.y, '#FFD700');
+      }
       if (col.type === 'coffee') {
         score += 25; if (score > hiScore) hiScore = score;
         // Coffee = speed boost + 3 second golden invulnerability
@@ -1331,14 +1376,32 @@
       // Distance score
       if (frameCount % 60 === 0) score += level;
 
-      // Level up every 60 seconds (3600 frames at 60fps)
-      const newLevel = 1 + Math.floor(frameCount / 3600);
+      // Level up every 30 seconds (1800 frames at 60fps), max level 9
+      const newLevel = Math.min(9, 1 + Math.floor(frameCount / 1800));
       if (newLevel > level) {
         level = newLevel;
-        speed = Math.min(9, 3.0 + (level - 1) * 0.6);
-        sfxLevelUp();
-        spawnScorePopup(W / 2 - 60, H / 2, `LEVEL ${level}! FASTER!`, COL.uiGold);
-        announceStatus('Level ' + level + '! Speed increasing.');
+        bonusRound = (level === 4);
+        if (level === 9) {
+          speed = 9;
+          sfxLevelUp();
+          spawnScorePopup(W / 2 - 90, H / 2 - 14, 'HYPERSPEED!!', '#FFD700');
+          spawnScorePopup(W / 2 - 90, H / 2 + 14, 'MAX SPEED! +1000', '#FF69B4');
+          if (!hyperSpeedAwarded) {
+            hyperSpeedAwarded = true;
+            score += 1000; if (score > hiScore) hiScore = score;
+          }
+          announceStatus('HYPERSPEED! Maximum speed! +1000 bonus points!');
+        } else if (bonusRound) {
+          speed = Math.min(8, 3.0 + (level - 1) * 0.6);
+          sfxLevelUp();
+          spawnScorePopup(W / 2 - 75, H / 2, 'BONUS ROUND!', '#FF69B4');
+          announceStatus('BONUS ROUND! Gold bins worth double points for 30 seconds!');
+        } else {
+          speed = Math.min(8, 3.0 + (level - 1) * 0.6);
+          sfxLevelUp();
+          spawnScorePopup(W / 2 - 60, H / 2, `LEVEL ${level}! FASTER!`, COL.uiGold);
+          announceStatus('Level ' + level + '! Speed increasing.');
+        }
       }
 
       // Spawn
@@ -1366,6 +1429,7 @@
         const bob = Math.sin(frameCount * 0.08 + c.x * 0.01) * 4;
         if (c.type === 'bin') drawBin(c.x, c.y, bob);
         if (c.type === 'bluebin') drawBlueBin(c.x, c.y, bob);
+        if (c.type === 'goldbin') drawGoldBin(c.x, c.y, bob);
         if (c.type === 'coffee') drawCoffeeCup(c.x, c.y, bob);
       });
 
@@ -1454,6 +1518,7 @@
       state = 'playing';
       score = 0; lives = 3; level = 1;
       speed = 3.0; speedMult = 1; coffeeTimer = 0;
+      bonusRound = false; hyperSpeedAwarded = false;
       barneyLane = 1; barneyTargetLane = 1; barneyY = LANE_Y[1];
       obstacles = []; collectibles = []; particles = []; scorePopups = [];
       nextSpawn = 80; invTimer = 0; flashTimer = 0; wagonBounce = 0;
