@@ -783,6 +783,45 @@
       return total;
     }
 
+    // ── BOSS TRACK — ominous descending minor, 118 BPM ───────────────────────────
+    function bossTrack(t0) {
+      const Q = 60 / 118;
+      const mel = [
+        [220,0.5],[207.65,0.5],[195.99,1],[220,0.5],[174.61,0.5],
+        [185,1],[174.61,0.5],[155.56,0.5],[164.81,2],
+        [233.08,0.5],[220,0.5],[207.65,1],[195.99,0.5],[220,0.5],
+        [185,1],[174.61,0.5],[155.56,0.5],[146.83,3],
+      ];
+      const bass = [
+        [110,2],[103.83,2],[116.54,2],[98,2],
+        [110,2],[116.54,2],[103.83,2],[98,4],
+      ];
+      let t = t0, total = 0;
+      mel.forEach(([f,b]) => { _mn(f, t, b*Q*0.72, 'sawtooth', 0.07); t += b*Q; total += b*Q; });
+      t = t0;
+      bass.forEach(([f,b]) => { _mn(f, t, b*Q*0.85, 'triangle', 0.17); t += b*Q; });
+      return total;
+    }
+
+    // ── BOSS VICTORY TRACK — triumphant fanfare, 162 BPM ─────────────────────────
+    function bossVictoryTrack(t0) {
+      const Q = 60 / 162;
+      const mel = [
+        [523.25,0.5],[659.25,0.5],[783.99,0.5],[1046.5,0.5],
+        [880,0.5],[783.99,0.5],[1046.5,2],
+        [880,0.5],[783.99,0.5],[659.25,0.5],[523.25,0.5],
+        [659.25,0.5],[783.99,0.5],[1046.5,3],
+      ];
+      const bass = [
+        [130.81,2],[196,2],[261.63,2],[174.61,2],[130.81,4],
+      ];
+      let t = t0, total = 0;
+      mel.forEach(([f,b]) => { _mn(f, t, b*Q*0.82, 'square',   0.10); t += b*Q; total += b*Q; });
+      t = t0;
+      bass.forEach(([f,b]) => { _mn(f, t, b*Q*0.70, 'triangle', 0.14); t += b*Q; });
+      return total;
+    }
+
     // ==================== ACCESSIBILITY HELPER ====================
     function announceStatus(msg) {
       const el = document.getElementById('game-status');
@@ -828,6 +867,23 @@
     let scorePopups = [];
     let obstacles = [], collectibles = [], particles = [];
     let clouds = [];
+
+    // ==================== BOSS STATE ====================
+    const VILLAIN_QUOTES = [
+      "Bow before the RAT KING!", "Ha ha ha ha ha!",
+      "Your bins are MINE!", "I'll bury you in rubbish!",
+      "Resistance is futile!", "You pathetic lorry!",
+      "The streets belong to ME!", "Foiled again… NOT!",
+      "Squeak of DOOM!", "My rubbish shall PREVAIL!",
+      "You can't stop the Rat King!", "Mwahahaha!",
+    ];
+    let bossPhase = 'none'; // 'none'|'intro'|'fight'|'defeated'
+    let bossIntroTimer = 0, bossDefeatTimer = 0;
+    let bossHp = 6, bossX = 0, bossY = 0, bossTargetY = 0;
+    let bossMoveTimer = 0, bossThrowTimer = 0, bossAutoFireTimer = 0, bossFrame = 0;
+    let bossQuote = '', bossQuoteTimer = 0, bossQuoteShowTimer = 0;
+    let missiles = [], bossProjectiles = [];
+    let bossFlashTimer = 0;
 
     // ==================== ENTITY SYSTEM ====================
     class Entity {
@@ -1425,7 +1481,9 @@
       if (newLevel > level) {
         level = newLevel;
         bonusRound = (level === 4);
-        if (level === 9) {
+        if (level === 5 && bossPhase === 'none') {
+          triggerBossLevel();
+        } else if (level === 9) {
           speed = 14;
           sfxLevelUp();
           spawnScorePopup(W / 2 - 90, H / 2 - 14, 'HYPERSPEED!!', '#FFD700');
@@ -1557,6 +1615,365 @@
       if (Math.floor(frameCount / 25) % 2 === 0) ctx.fillText('PRESS ENTER, SPACE OR TAP TO PLAY AGAIN', 152, 378);
     }
 
+    // ==================== BOSS LEVEL ====================
+    function triggerBossLevel() {
+      state = 'boss';
+      bossPhase = 'intro';
+      bossIntroTimer = 240;   // 4 seconds of intro at 60fps
+      bossHp = 6;
+      bossX = W - 80;
+      bossY = H / 2;
+      bossTargetY = H / 2;
+      bossMoveTimer = 0;
+      bossThrowTimer = 120;
+      bossAutoFireTimer = 0;
+      bossFrame = 0;
+      bossQuote = '';
+      bossQuoteTimer = 0;
+      bossQuoteShowTimer = 0;
+      missiles = [];
+      bossProjectiles = [];
+      bossFlashTimer = 0;
+      obstacles = [];
+      collectibles = [];
+      // music handled by game loop state change
+    }
+
+    function fireMissile() {
+      missiles.push({ x: 120, y: barneyY - 8, speed: 8 });
+      sfxHonk();
+    }
+
+    function drawDetergentMissile(x, y) {
+      const cx = ctx;
+      // bottle body — white
+      cx.fillStyle = '#E3F2FD'; cx.fillRect(x, y - 6, 18, 12);
+      // label — blue stripe
+      cx.fillStyle = '#1565C0'; cx.fillRect(x + 2, y - 3, 14, 6);
+      // cap — yellow
+      cx.fillStyle = '#FFD600'; cx.fillRect(x + 16, y - 4, 5, 8);
+      // nozzle — grey
+      cx.fillStyle = '#90A4AE'; cx.fillRect(x + 21, y - 2, 6, 4);
+      // bubbles trailing
+      cx.fillStyle = 'rgba(255,255,255,0.7)';
+      cx.beginPath(); cx.arc(x - 3, y, 2, 0, Math.PI * 2); cx.fill();
+      cx.beginPath(); cx.arc(x - 7, y - 2, 1.5, 0, Math.PI * 2); cx.fill();
+    }
+
+    function drawRubbishProjectile(x, y) {
+      const cx = ctx;
+      // black bin bag
+      cx.fillStyle = '#212121'; cx.beginPath(); cx.ellipse(x, y, 10, 12, 0, 0, Math.PI * 2); cx.fill();
+      // tie knot
+      cx.fillStyle = '#424242'; cx.beginPath(); cx.arc(x, y - 10, 4, 0, Math.PI * 2); cx.fill();
+      // sheen
+      cx.fillStyle = 'rgba(255,255,255,0.15)';
+      cx.beginPath(); cx.ellipse(x - 3, y - 4, 4, 6, -0.4, 0, Math.PI * 2); cx.fill();
+    }
+
+    function drawRatKingBoss(bx, by, frame, flashTimer) {
+      const cx = ctx;
+      const flash = flashTimer > 0;
+      const bodyCol  = flash ? '#FFFFFF' : '#757575';
+      const darkCol  = flash ? '#FFFFFF' : '#424242';
+      const bellyCol = flash ? '#FFFFFF' : '#BDBDBD';
+      const crownCol = flash ? '#FFFFFF' : '#FFD700';
+      const gemCol   = flash ? '#FFFFFF' : '#F44336';
+      const eyeCol   = flash ? '#FFFFFF' : '#FF1744';
+      const noseCol  = flash ? '#FFFFFF' : '#CC1100';
+      const earCol   = flash ? '#FFFFFF' : '#C2185B';
+      const tailCol  = flash ? '#FFFFFF' : '#F8BBD0';
+
+      // Scale: boss is about 3× normal rat — ~96px wide, ~60px tall
+      const s = 3; // pixel size
+      // Crown (sits above head)
+      cx.fillStyle = crownCol;
+      cx.fillRect(bx - 30, by - 58, 60, 18);      // crown band
+      // crown points
+      [[0,18],[20,18],[40,18]].forEach(([ox]) => {
+        cx.fillRect(bx - 30 + ox, by - 76, 18, 20);
+      });
+      cx.fillStyle = gemCol;
+      cx.beginPath(); cx.arc(bx - 30 + 9, by - 65, 5, 0, Math.PI * 2); cx.fill();
+      cx.beginPath(); cx.arc(bx + 9,       by - 65, 5, 0, Math.PI * 2); cx.fill();
+      cx.beginPath(); cx.arc(bx - 30 + 29, by - 65, 4, 0, Math.PI * 2); cx.fill();
+
+      // Ears (large, pink inside)
+      cx.fillStyle = darkCol; cx.fillRect(bx - 14, by - 44, 20, 20);
+      cx.fillStyle = earCol;  cx.fillRect(bx - 10, by - 40, 12, 12);
+
+      // Body
+      cx.fillStyle = bodyCol;
+      cx.beginPath(); cx.ellipse(bx, by, 44, 34, 0, 0, Math.PI * 2); cx.fill();
+
+      // Belly
+      cx.fillStyle = bellyCol;
+      cx.beginPath(); cx.ellipse(bx + 6, by + 4, 28, 22, 0.1, 0, Math.PI * 2); cx.fill();
+
+      // Snout / head — pushed left (boss faces left toward player)
+      cx.fillStyle = bodyCol;
+      cx.beginPath(); cx.ellipse(bx - 38, by - 8, 20, 16, 0, 0, Math.PI * 2); cx.fill();
+
+      // Nose
+      cx.fillStyle = noseCol;
+      cx.beginPath(); cx.arc(bx - 56, by - 8, 5, 0, Math.PI * 2); cx.fill();
+
+      // Eye
+      cx.fillStyle = eyeCol;
+      cx.beginPath(); cx.arc(bx - 30, by - 18, 5, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = '#000'; cx.beginPath(); cx.arc(bx - 29, by - 19, 2, 0, Math.PI * 2); cx.fill();
+
+      // Whiskers
+      cx.strokeStyle = darkCol; cx.lineWidth = 2;
+      [[-3],[-1],[1]].forEach(([oy]) => {
+        cx.beginPath(); cx.moveTo(bx - 56, by - 8 + oy * 3); cx.lineTo(bx - 80, by - 12 + oy * 3); cx.stroke();
+        cx.beginPath(); cx.moveTo(bx - 56, by - 8 + oy * 3); cx.lineTo(bx - 80, by - 4 + oy * 3); cx.stroke();
+      });
+
+      // Arms reaching forward (animated)
+      const armSwing = Math.sin(frame * 0.1) * 8;
+      cx.fillStyle = bodyCol;
+      cx.fillRect(bx - 60, by + armSwing - 6, 20, 10);
+      cx.fillRect(bx - 60, by - armSwing + 10, 20, 10);
+
+      // Legs (animated)
+      const legSwing = Math.sin(frame * 0.12) * 6;
+      cx.fillStyle = darkCol;
+      cx.fillRect(bx - 16, by + 30, 12, 14 + legSwing);
+      cx.fillRect(bx + 4,  by + 30, 12, 14 - legSwing);
+
+      // Tail — pink curve to the right
+      cx.strokeStyle = tailCol; cx.lineWidth = 6; cx.lineCap = 'round';
+      cx.beginPath();
+      cx.moveTo(bx + 44, by + 10);
+      cx.quadraticCurveTo(bx + 80, by - 10 + Math.sin(frame * 0.08) * 10, bx + 90, by + 30);
+      cx.stroke();
+
+      // HP bar above boss
+      const barW = 120, barH = 10;
+      const barX = bx - barW / 2, barY = by - 100;
+      cx.fillStyle = '#333'; cx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+      cx.fillStyle = '#FF1744'; cx.fillRect(barX, barY, barW * (bossHp / 6), barH);
+      cx.fillStyle = '#EF9A9A';
+      for (let i = 1; i < 6; i++) {
+        cx.fillRect(barX + barW / 6 * i - 1, barY, 2, barH);
+      }
+      cx.fillStyle = '#FFF'; cx.font = 'bold 11px Courier New'; cx.textAlign = 'center';
+      cx.fillText('RAT KING HP', bx, barY - 5);
+      cx.textAlign = 'left';
+    }
+
+    function drawSpeechBubble(bx, by, text) {
+      const cx = ctx;
+      const pad = 10;
+      cx.font = 'bold 13px Courier New';
+      const tw = cx.measureText(text).width;
+      const bw = tw + pad * 2, bh = 30;
+      const tx = bx - bw - 20, ty = by - 90;
+      // bubble
+      cx.fillStyle = '#FFFDE7'; cx.strokeStyle = '#F57F17'; cx.lineWidth = 2;
+      cx.beginPath();
+      const r = 8;
+      cx.moveTo(tx + r, ty); cx.lineTo(tx + bw - r, ty); cx.arcTo(tx + bw, ty, tx + bw, ty + r, r);
+      cx.lineTo(tx + bw, ty + bh - r); cx.arcTo(tx + bw, ty + bh, tx + bw - r, ty + bh, r);
+      cx.lineTo(tx + r, ty + bh); cx.arcTo(tx, ty + bh, tx, ty + bh - r, r);
+      cx.lineTo(tx, ty + r); cx.arcTo(tx, ty, tx + r, ty, r); cx.closePath();
+      cx.fill(); cx.stroke();
+      // tail pointing right toward boss
+      cx.fillStyle = '#FFFDE7';
+      cx.beginPath(); cx.moveTo(tx + bw - 5, ty + bh - 5); cx.lineTo(tx + bw + 15, ty + bh + 5); cx.lineTo(tx + bw - 5, ty + bh + 5); cx.closePath(); cx.fill();
+      cx.strokeStyle = '#F57F17';
+      cx.beginPath(); cx.moveTo(tx + bw - 5, ty + bh - 5); cx.lineTo(tx + bw + 15, ty + bh + 5); cx.stroke();
+      // text
+      cx.fillStyle = '#5D4037'; cx.font = 'bold 13px Courier New';
+      cx.fillText(text, tx + pad, ty + 20);
+    }
+
+    function updateBoss(dt) {
+      bossFrame += dt;
+      bossFlashTimer = Math.max(0, bossFlashTimer - dt);
+      bgScroll += 2 * dt;
+
+      if (bossPhase === 'intro') {
+        bossIntroTimer -= dt;
+        if (bossIntroTimer <= 0) bossPhase = 'fight';
+        return;
+      }
+
+      if (bossPhase === 'defeated') {
+        bossDefeatTimer -= dt;
+        if (bossDefeatTimer <= 0) {
+          // Resume normal play at level 5
+          state = 'playing';
+          bossPhase = 'none';
+          level = 5;
+          frameCount = level * 1800; // so level calc stays correct
+          speed = Math.min(12, 5.0 + (level - 1) * 0.9);
+          bonusRound = false;
+          obstacles = []; collectibles = [];
+          missiles = []; bossProjectiles = [];
+          spawnScorePopup(W / 2 - 60, H / 2, 'LEVEL 5! FASTER!', COL.uiGold);
+        }
+        return;
+      }
+
+      // ── FIGHT ──
+
+      // Boss vertical movement
+      bossMoveTimer -= dt;
+      if (bossMoveTimer <= 0) {
+        bossMoveTimer = 90 + Math.random() * 60;
+        bossTargetY = ROAD_TOP + 30 + Math.random() * (ROAD_BOT - ROAD_TOP - 60);
+      }
+      bossY += (bossTargetY - bossY) * (1 - Math.pow(0.96, dt));
+
+      // Boss throws rubbish at player
+      bossThrowTimer -= dt;
+      if (bossThrowTimer <= 0) {
+        bossThrowTimer = 80 + Math.random() * 60;
+        const targetY = LANE_Y[Math.floor(Math.random() * 3)];
+        const dx = 80 - (W - 80); // approx wagon x - boss x
+        const dy = targetY - bossY;
+        const spd = 5;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        bossProjectiles.push({ x: bossX - 60, y: bossY, vx: dx / dist * spd, vy: dy / dist * spd });
+      }
+
+      // Auto-fire missiles every 2.5 seconds (so boss isn't too easy)
+      bossAutoFireTimer -= dt;
+      if (bossAutoFireTimer <= 0) {
+        bossAutoFireTimer = 150;
+        fireMissile();
+      }
+
+      // Move missiles
+      missiles.forEach(m => { m.x += m.speed * dt; });
+      missiles = missiles.filter(m => m.x < W + 40);
+
+      // Move boss projectiles
+      bossProjectiles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; });
+      bossProjectiles = bossProjectiles.filter(p => p.x > -40 && p.y > -40 && p.y < H + 40);
+
+      // Missile hits boss
+      missiles.forEach(m => {
+        if (m.x > bossX - 70 && m.x < bossX + 20 && Math.abs(m.y - bossY) < 45) {
+          m.x = W + 100; // remove
+          bossHp--;
+          bossFlashTimer = 18;
+          spawnCollectEffect(bossX - 30, bossY, '#FFD700');
+          if (bossHp <= 0) {
+            bossPhase = 'defeated';
+            bossDefeatTimer = 240;
+            startBgMusic('bossVictory', bossVictoryTrack);
+            score += 500; if (score > hiScore) hiScore = score;
+            spawnScorePopup(W / 2 - 70, H / 2 - 20, 'BOSS DEFEATED!', '#FFD700');
+            spawnScorePopup(W / 2 - 50, H / 2 + 10, '+500 PTS!', '#FF69B4');
+          }
+        }
+      });
+
+      // Boss projectile hits wagon
+      if (invTimer <= 0) {
+        bossProjectiles.forEach(p => {
+          if (Math.abs(p.x - 80) < 30 && Math.abs(p.y - barneyY) < 25) {
+            p.x = -100; // remove
+            lives--;
+            invTimer = 90;
+            flashTimer = 30;
+            barneyFace = 'scared'; barneyFaceTimer = 60;
+            wagonBounce = 8;
+            if (lives <= 0) {
+              state = 'gameover';
+              startBgMusic('gameover', gameOverTrack);
+            }
+          }
+        });
+      }
+      bossProjectiles = bossProjectiles.filter(p => p.x > -40);
+
+      // Speech bubble — show a quote every 5-8 seconds
+      bossQuoteTimer -= dt;
+      if (bossQuoteTimer <= 0) {
+        bossQuote = VILLAIN_QUOTES[Math.floor(Math.random() * VILLAIN_QUOTES.length)];
+        bossQuoteShowTimer = 180;
+        bossQuoteTimer = 300 + Math.random() * 180;
+      }
+      if (bossQuoteShowTimer > 0) bossQuoteShowTimer -= dt;
+
+      // Barney lane movement also works in boss state (handled by input already)
+      const targetY = LANE_Y[barneyTargetLane];
+      barneyY += (targetY - barneyY) * (1 - Math.pow(0.85, dt));
+      if (Math.abs(barneyY - targetY) < 1) { barneyY = targetY; barneyLane = barneyTargetLane; }
+      if (invTimer > 0) invTimer -= dt;
+      if (flashTimer > 0) flashTimer -= dt;
+      if (honkTimer > 0) honkTimer -= dt;
+    }
+
+    function drawBossLevel() {
+      // Draw a dark city backdrop
+      ctx.clearRect(0, 0, W, H);
+      // Sky — ominous dark red/purple gradient
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#1A0A0A');
+      grad.addColorStop(0.5, '#2D0A1E');
+      grad.addColorStop(1, '#3E0A0A');
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+      drawClouds();
+      drawBuildings();
+      drawLampPosts();
+      drawPavement();
+      drawRoad();
+
+      if (bossPhase === 'intro') {
+        // Full-screen intro overlay
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, W, H);
+        const pulse = 0.85 + 0.15 * Math.sin(frameCount * 0.12);
+        ctx.save(); ctx.translate(W / 2, H / 2 - 30); ctx.scale(pulse, pulse);
+        ctx.fillStyle = '#FF1744'; ctx.font = 'bold 36px Courier New'; ctx.textAlign = 'center';
+        ctx.fillText('⚠  THE RAT KING', 0, -10);
+        ctx.fillText('APPROACHES...  ⚠', 0, 30);
+        ctx.fillStyle = '#FFD700'; ctx.font = 'bold 16px Courier New';
+        ctx.fillText('Arm your detergent missiles!', 0, 70);
+        ctx.fillText('[SPACE / HONK] to fire', 0, 92);
+        ctx.restore();
+        ctx.textAlign = 'left';
+        return;
+      }
+
+      // Draw missile(s)
+      missiles.forEach(m => drawDetergentMissile(m.x, m.y));
+
+      // Draw rubbish projectiles
+      bossProjectiles.forEach(p => drawRubbishProjectile(p.x, p.y));
+
+      // Draw the Rat King Boss
+      drawRatKingBoss(bossX, bossY, bossFrame, bossFlashTimer);
+
+      // Speech bubble
+      if (bossQuoteShowTimer > 0 && bossQuote) {
+        drawSpeechBubble(bossX, bossY, bossQuote);
+      }
+
+      // Draw wagon (invulnerable flash)
+      if (invTimer <= 0 || Math.floor(invTimer / 6) % 2 === 0) drawWagon(WAGON_X, barneyY, 0, false);
+
+      updateAndDrawParticles();
+      updateDrawPopups();
+      drawUI();
+      drawHitFlash();
+
+      if (bossPhase === 'defeated') {
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#FFD700'; ctx.font = 'bold 32px Courier New'; ctx.textAlign = 'center';
+        ctx.fillText('THE RAT KING IS DEFEATED!', W / 2, H / 2 - 20);
+        ctx.fillStyle = '#FF69B4'; ctx.font = 'bold 18px Courier New';
+        ctx.fillText('+500 BONUS POINTS!', W / 2, H / 2 + 20);
+        ctx.fillStyle = '#80CBC4'; ctx.font = '14px Courier New';
+        ctx.fillText('Resuming normal run...', W / 2, H / 2 + 50);
+        ctx.textAlign = 'left';
+      }
+    }
+
     // ==================== GAME CONTROL ====================
     function startGame() {
       ensureAudio();
@@ -1566,6 +1983,8 @@
       bonusRound = false; hyperSpeedAwarded = false; distScoreTimer = 0;
       barneyLane = 1; barneyTargetLane = 1; barneyY = LANE_Y[1];
       obstacles = []; collectibles = []; particles = []; scorePopups = [];
+      missiles = []; bossProjectiles = [];
+      bossPhase = 'none'; bossHp = 6; bossFlashTimer = 0; bossQuote = ''; bossQuoteTimer = 0; bossQuoteShowTimer = 0;
       nextSpawn = 80; invTimer = 0; flashTimer = 0; wagonBounce = 0;
       barneyFace = 'normal'; barneyFaceTimer = 0; blinkTimer = 200;
       frameCount = 0; roadScroll = 0;
@@ -1578,10 +1997,14 @@
     document.addEventListener('keydown', e => {
       if (keys[e.code]) return;
       keys[e.code] = true; ensureAudio();
-      if (state === 'playing') {
+      if (state === 'playing' || state === 'boss') {
         if ((e.code === 'ArrowUp' || e.code === 'KeyW') && barneyTargetLane > 0) barneyTargetLane--;
         if ((e.code === 'ArrowDown' || e.code === 'KeyS') && barneyTargetLane < 2) barneyTargetLane++;
-        if (e.code === 'Space' || e.code === 'KeyH') { if (honkTimer <= 0) { sfxHonk(); honkTimer = 45; honkNearby(); } }
+        if (state === 'playing') {
+          if (e.code === 'Space' || e.code === 'KeyH') { if (honkTimer <= 0) { sfxHonk(); honkTimer = 45; honkNearby(); } }
+        } else if (bossPhase === 'fight') {
+          if (e.code === 'Space' || e.code === 'KeyH') fireMissile();
+        }
       } else if (e.code === 'Enter' || e.code === 'Space') {
         ensureAudio();
         if (state === 'gameover') state = 'menu';
@@ -1604,6 +2027,10 @@
         if (dy < -20 && barneyTargetLane > 0) barneyTargetLane--;
         if (dy > 20 && barneyTargetLane < 2) barneyTargetLane++;
         if (Math.abs(dy) < 15) { if (honkTimer <= 0) { sfxHonk(); honkTimer = 45; honkNearby(); } }
+      } else if (state === 'boss') {
+        if (dy < -20 && barneyTargetLane > 0) barneyTargetLane--;
+        if (dy > 20 && barneyTargetLane < 2) barneyTargetLane++;
+        if (Math.abs(dy) < 15 && bossPhase === 'fight') fireMissile();
       }
       e.preventDefault();
     }, { passive: false });
@@ -1613,9 +2040,9 @@
       const btnUp = document.getElementById('btn-up'), btnDown = document.getElementById('btn-down'), btnHonk = document.getElementById('btn-honk');
       if (!btnUp) return;
       function advanceState() { ensureAudio(); if (state === 'gameover') state = 'menu'; else if (state === 'menu') startGame(); }
-      const onUp   = e => { e.preventDefault(); ensureAudio(); if (state === 'playing') { if (barneyTargetLane > 0) barneyTargetLane--; } else advanceState(); };
-      const onDown = e => { e.preventDefault(); ensureAudio(); if (state === 'playing') { if (barneyTargetLane < 2) barneyTargetLane++; } else advanceState(); };
-      const onHonk = e => { e.preventDefault(); ensureAudio(); if (state === 'playing') { if (honkTimer <= 0) { sfxHonk(); honkTimer = 45; honkNearby(); } } else advanceState(); };
+      const onUp   = e => { e.preventDefault(); ensureAudio(); if (state === 'playing' || state === 'boss') { if (barneyTargetLane > 0) barneyTargetLane--; } else advanceState(); };
+      const onDown = e => { e.preventDefault(); ensureAudio(); if (state === 'playing' || state === 'boss') { if (barneyTargetLane < 2) barneyTargetLane++; } else advanceState(); };
+      const onHonk = e => { e.preventDefault(); ensureAudio(); if (state === 'playing') { if (honkTimer <= 0) { sfxHonk(); honkTimer = 45; honkNearby(); } } else if (state === 'boss' && bossPhase === 'fight') { fireMissile(); } else advanceState(); };
       btnUp.addEventListener('touchstart', onUp, { passive: false }); btnUp.addEventListener('mousedown', onUp);
       btnDown.addEventListener('touchstart', onDown, { passive: false }); btnDown.addEventListener('mousedown', onDown);
       btnHonk.addEventListener('touchstart', onHonk, { passive: false }); btnHonk.addEventListener('mousedown', onHonk);
@@ -1644,11 +2071,13 @@
         if      (state === 'menu')     startBgMusic('menu',     menuTrack);
         else if (state === 'gameover') startBgMusic('gameover', gameOverTrack);
         else if (state === 'playing')  stopBgMusic();
+        else if (state === 'boss')     startBgMusic('boss',     bossTrack);
         prevState = state;
       }
       _cloudDt = dt; _particleDt = dt; _popupDt = dt;
       if (state === 'menu') { bgScroll += 0.5 * dt; drawMenu(); }
       else if (state === 'playing') { update(dt); draw(); }
+      else if (state === 'boss')    { updateBoss(dt); drawBossLevel(); }
       else if (state === 'gameover') { bgScroll += 0.2 * dt; drawGameOver(); }
       requestAnimationFrame(loop);
     }
