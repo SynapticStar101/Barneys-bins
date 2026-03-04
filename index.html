@@ -1626,10 +1626,10 @@
       bossTargetY = H / 2;
       bossMoveTimer = 0;
       bossThrowTimer = 120;
-      bossAutoFireTimer = 0;
+      bossAutoFireTimer = 150;
       bossFrame = 0;
       bossQuote = '';
-      bossQuoteTimer = 0;
+      bossQuoteTimer = 200;
       bossQuoteShowTimer = 0;
       missiles = [];
       bossProjectiles = [];
@@ -1823,7 +1823,7 @@
       bossMoveTimer -= dt;
       if (bossMoveTimer <= 0) {
         bossMoveTimer = 90 + Math.random() * 60;
-        bossTargetY = ROAD_TOP + 30 + Math.random() * (ROAD_BOT - ROAD_TOP - 60);
+        bossTargetY = ROAD_TOP + 30 + Math.random() * (ROAD_H - 60);
       }
       bossY += (bossTargetY - bossY) * (1 - Math.pow(0.96, dt));
 
