@@ -466,37 +466,46 @@
       ]
     };
 
-    // ── RAT (16w × 8h) — longer S-curve tail, frame A ──────────────────────────
+    // ── RAT (16w × 8h, P=3 → 48×24px on screen) ────────────────────────────────
+    // Facing LEFT: snout cols 0-2, large ear rows 0-1 cols 4-6,
+    // whiskers col 0-1 rows 2-4, pink worm-tail curving up cols 11-15 rows 0-3
     const RAT_PAL = {
-      1: '#9E9E9E', 2: '#616161', 3: '#E0E0E0', 4: '#D32F2F',
-      5: '#F48FB1', 6: '#E91E63', 7: '#BDBDBD', 8: '#424242',
+      1: '#9E9E9E',  // medium grey body
+      2: '#616161',  // dark grey snout outline / legs
+      3: '#E0E0E0',  // light grey belly
+      4: '#CC1100',  // red nose + eye
+      5: '#F8BBD0',  // pale pink tail + inner ear
+      6: '#C2185B',  // deep pink ear border
+      7: '#BDBDBD',  // light grey feet
+      8: '#212121',  // near-black whiskers
     };
     const S_RAT = {
       pal: RAT_PAL,
       d: [
-        // head/body cols 0-8, tail cols 9-15 arcs upward then curves right
-        [0, 0, 5, 1, 1, 1, 1, 0, 0, 0, 8, 8, 8, 8, 8, 0],
-        [0, 5, 5, 1, 4, 1, 1, 1, 0, 8, 1, 8, 0, 0, 0, 8],
-        [0, 0, 1, 1, 1, 1, 1, 1, 1, 6, 0, 0, 0, 0, 8, 8],
-        [0, 0, 1, 3, 3, 1, 1, 1, 1, 6, 0, 0, 0, 0, 0, 0],
-        [0, 0, 1, 3, 3, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 2, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 2, 0, 2, 0, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0],
-        [0, 7, 0, 7, 0, 0, 7, 0, 7, 0, 0, 0, 0, 0, 0, 0],
+        //  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
+        [   0,  0,  0,  0,  6,  6,  6,  0,  1,  1,  1,  5,  5,  5,  0,  0],  // ear top; body; tail arc
+        [   0,  0,  0,  6,  5,  5,  6,  1,  1,  1,  1,  1,  5,  5,  5,  0],  // ear; body; tail
+        [   8,  0,  2,  1,  1,  4,  1,  1,  1,  1,  1,  1,  1,  0,  5,  5],  // whisker; snout; eye; body; tail tip
+        [   4,  8,  2,  1,  1,  1,  1,  3,  3,  3,  3,  1,  0,  0,  0,  5],  // nose+whisker; belly; tail end
+        [   8,  0,  2,  1,  1,  1,  1,  3,  3,  3,  1,  1,  0,  0,  0,  0],  // whisker; snout; belly; body
+        [   0,  0,  0,  2,  1,  1,  1,  1,  1,  1,  2,  0,  2,  0,  0,  0],  // underside; front+back legs
+        [   0,  0,  0,  2,  0,  2,  0,  0,  0,  2,  0,  0,  2,  0,  0,  0],  // legs
+        [   0,  0,  0,  7,  0,  7,  0,  0,  0,  7,  0,  0,  7,  0,  0,  0],  // feet
       ]
     };
-    // Frame B — legs alt, tail slightly lower path (gives swishing animation)
+    // Frame B — legs alternate, tail swishes slightly
     const S_RAT_B = {
       pal: RAT_PAL,
       d: [
-        [0, 0, 5, 1, 1, 1, 1, 0, 0, 0, 8, 0, 0, 0, 0, 0],
-        [0, 5, 5, 1, 4, 1, 1, 1, 0, 8, 1, 8, 8, 8, 0, 0],
-        [0, 0, 1, 1, 1, 1, 1, 1, 1, 6, 0, 0, 0, 8, 8, 8],
-        [0, 0, 1, 3, 3, 1, 1, 1, 1, 6, 0, 0, 0, 0, 0, 8],
-        [0, 0, 1, 3, 3, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 2, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 2, 0, 2, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 7, 0, 7, 7, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0],
+        //  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
+        [   0,  0,  0,  0,  6,  6,  6,  0,  1,  1,  1,  0,  5,  5,  5,  0],  // ear top; body; tail swished
+        [   0,  0,  0,  6,  5,  5,  6,  1,  1,  1,  1,  1,  0,  5,  5,  5],  // ear; body; tail
+        [   8,  0,  2,  1,  1,  4,  1,  1,  1,  1,  1,  1,  1,  1,  0,  5],  // whisker; snout; eye; body; tail
+        [   4,  8,  2,  1,  1,  1,  1,  3,  3,  3,  3,  1,  0,  0,  0,  5],  // nose+whisker; belly; tail end
+        [   8,  0,  2,  1,  1,  1,  1,  3,  3,  3,  1,  1,  0,  0,  0,  0],  // whisker; belly; body
+        [   0,  0,  0,  2,  1,  1,  1,  1,  1,  1,  2,  0,  2,  0,  0,  0],  // underside; legs
+        [   0,  0,  0,  0,  2,  0,  2,  0,  2,  0,  0,  2,  0,  0,  0,  0],  // legs alternate
+        [   0,  0,  0,  0,  7,  0,  7,  0,  7,  0,  0,  7,  0,  0,  0,  0],  // feet alternate
       ]
     };
 
