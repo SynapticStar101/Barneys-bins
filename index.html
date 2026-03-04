@@ -208,6 +208,7 @@
       <button class="m-btn" id="btn-up" aria-label="Move up one lane">▲ UP</button>
       <button class="m-btn" id="btn-honk" aria-label="Honk the horn">HONK</button>
       <button class="m-btn" id="btn-down" aria-label="Move down one lane">▼ DN</button>
+      <button class="m-btn" id="btn-snd" aria-label="Enable sound" style="flex:0 0 auto;min-width:48px;font-size:22px;border-color:#80CBC4;color:#80CBC4;">🔊</button>
     </div>
   </div>
   <div id="name-overlay" role="dialog" aria-modal="true" aria-label="Enter your name for the high score board">
@@ -620,27 +621,50 @@
 
     // ==================== AUDIO ====================
     let audioCtx = null;
+    let audioUnlocked = false;   // true once AudioContext confirmed 'running'
+    let _audioUnlockPoll = null; // interval id while waiting for unlock
+
+    function onAudioUnlocked() {
+      // Re-trigger whatever music track was queued — context is now running
+      var id = bgMusicId;
+      bgMusicId = null;
+      if      (state === 'menu')     startBgMusic('menu',     menuTrack);
+      else if (state === 'gameover') startBgMusic('gameover', gameOverTrack);
+      // Show ✓ on sound button then hide it
+      var btn = document.getElementById('btn-snd');
+      if (btn) { btn.textContent = '✓'; setTimeout(function() { btn.style.display = 'none'; }, 700); }
+    }
+
     function ensureAudio() {
       if (!audioCtx) {
         try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return; }
       }
-      if (audioCtx.state !== 'running') {
-        var p = audioCtx.resume();
-        if (p && typeof p.then === 'function') {
-          p.then(function() {
-            // Play a zero-length silent buffer after context is running — iOS Safari requires this
-            try {
-              var buf = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
-              var src = audioCtx.createBufferSource();
-              src.buffer = buf; src.connect(audioCtx.destination); src.start(0);
-            } catch(e) {}
-            // Re-trigger background music now that context is running
-            var id = bgMusicId;
-            bgMusicId = null;
-            if      (id === 'menu')     startBgMusic('menu',     menuTrack);
-            else if (id === 'gameover') startBgMusic('gameover', gameOverTrack);
-          }).catch(function() {});
-        }
+      // If already running, mark unlocked and return
+      if (audioCtx.state === 'running') {
+        if (!audioUnlocked) { audioUnlocked = true; onAudioUnlocked(); }
+        return;
+      }
+      // iOS Safari unlock: play silent buffer SYNCHRONOUSLY within the gesture,
+      // then call resume(). Both must happen before the call stack unwinds.
+      try {
+        var buf = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
+        var src = audioCtx.createBufferSource();
+        src.buffer = buf; src.connect(audioCtx.destination); src.start(0);
+      } catch(e) {}
+      audioCtx.resume().catch(function() {});
+      // Poll every 50 ms until context confirms 'running' (async on some iOS versions)
+      if (!_audioUnlockPoll) {
+        _audioUnlockPoll = setInterval(function() {
+          if (audioCtx && audioCtx.state === 'running' && !audioUnlocked) {
+            clearInterval(_audioUnlockPoll); _audioUnlockPoll = null;
+            audioUnlocked = true;
+            onAudioUnlocked();
+          }
+        }, 50);
+        // Stop polling after 6 s regardless
+        setTimeout(function() {
+          if (_audioUnlockPoll) { clearInterval(_audioUnlockPoll); _audioUnlockPoll = null; }
+        }, 6000);
       }
     }
     function playTone(freq, dur, type, vol) {
@@ -1595,8 +1619,17 @@
       btnUp.addEventListener('touchstart', onUp, { passive: false }); btnUp.addEventListener('mousedown', onUp);
       btnDown.addEventListener('touchstart', onDown, { passive: false }); btnDown.addEventListener('mousedown', onDown);
       btnHonk.addEventListener('touchstart', onHonk, { passive: false }); btnHonk.addEventListener('mousedown', onHonk);
+      // Dedicated sound unlock button — always calls ensureAudio synchronously
+      const btnSnd = document.getElementById('btn-snd');
+      if (btnSnd) {
+        const onSnd = e => { e.preventDefault(); ensureAudio(); };
+        btnSnd.addEventListener('touchstart', onSnd, { passive: false });
+        btnSnd.addEventListener('mousedown',  onSnd);
+      }
     }
     setupMobileButtons();
+    // Catch-all: any touch anywhere on the page also attempts to unlock audio
+    document.addEventListener('touchstart', ensureAudio, { passive: true });
 
     // ==================== GAME LOOP ====================
     let prevState = null;
