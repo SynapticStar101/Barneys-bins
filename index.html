@@ -1391,11 +1391,15 @@
     // ==================== COLLISION ====================
     function checkCollisions() {
       const wagLeft = WAGON_X - 95, wagRight = WAGON_X + 75;
+      // Use the lane barney is physically closest to — barneyLane lags behind
+      // during transitions (only snaps at <1px) causing phantom hits in old lane
+      const physLane = LANE_Y.reduce((b, y, i) =>
+        Math.abs(barneyY - y) < Math.abs(barneyY - LANE_Y[b]) ? i : b, 0);
       // Obstacles: only dangerous when NOT invincible
       if (invTimer <= 0) {
         obstacles.forEach(obs => {
           if (!obs.active || obs.dodging) return;
-          if (obs.lane !== barneyLane && obs.lane !== barneyTargetLane) return;
+          if (obs.lane !== physLane && obs.lane !== barneyTargetLane) return;
           if (obs.x < wagLeft || obs.x > wagRight) return;
           handleObstacleHit(obs);
         });
@@ -1403,7 +1407,7 @@
       // Collectibles: always collected, even during coffee invincibility
       collectibles.forEach(col => {
         if (!col.active) return;
-        if (col.lane !== barneyLane && col.lane !== barneyTargetLane) return;
+        if (col.lane !== physLane && col.lane !== barneyTargetLane) return;
         if (col.x < wagLeft - 20 || col.x > wagRight + 20) return;
         handleCollect(col);
       });
