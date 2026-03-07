@@ -2126,18 +2126,20 @@
         bossDefeatTimer -= dt;
         if (bossDefeatTimer <= 0) {
           if (bossType === 'freddie') {
-            // Freddie defeated → reward with Bonus Round at level 4
+            // Freddie defeated → Bonus Round at level 4
+            // frameCount = (level-1)*1800 = 5400 so newLevel stays 4, not 5
             state = 'playing'; bossPhase = 'none'; bossType = 'ratking';
-            level = 4; frameCount = level * 1800;
+            level = 4; frameCount = (level - 1) * 1800;
             speed = Math.min(12, 5.0 + (level - 1) * 0.9);
             bonusRound = true; hyperSpeedAwarded = false;
             obstacles = []; collectibles = []; missiles = []; bossProjectiles = [];
             spawnScorePopup(W / 2 - 80, H / 2 - 14, 'BONUS ROUND!', '#FFD700');
             spawnScorePopup(W / 2 - 80, H / 2 + 14, 'COLLECT EVERYTHING!', '#80CBC4');
           } else {
-            // Rat King defeated → resume normal play at level 7
+            // Rat King defeated → normal play at level 7
+            // frameCount = (level-1)*1800 = 10800 so newLevel stays 7, not 8
             state = 'playing'; bossPhase = 'none';
-            level = 7; frameCount = level * 1800;
+            level = 7; frameCount = (level - 1) * 1800;
             speed = Math.min(12, 5.0 + (level - 1) * 0.9);
             bonusRound = false;
             obstacles = []; collectibles = []; missiles = []; bossProjectiles = [];
