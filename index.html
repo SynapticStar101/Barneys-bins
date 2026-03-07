@@ -690,6 +690,20 @@
     function sfxCoffee() {
       [330, 392, 494, 587, 698, 784].forEach((f, i) => setTimeout(() => playTone(f, 0.07, 'square', 0.09), i * 45));
     }
+    function sfxBarrelThrow() {
+      playTone(85, 0.12, 'sawtooth', 0.14);
+      setTimeout(() => playTone(65, 0.22, 'sawtooth', 0.09), 90);
+    }
+    function sfxFreddieHit() {
+      playTone(150, 0.06, 'square', 0.1);
+      setTimeout(() => playTone(200, 0.06, 'square', 0.08), 55);
+      setTimeout(() => playTone(120, 0.15, 'sawtooth', 0.07), 110);
+    }
+    function sfxNameSlam() {
+      playTone(55, 0.35, 'sawtooth', 0.2);
+      setTimeout(() => playTone(44, 0.5, 'sawtooth', 0.15), 120);
+      setTimeout(() => playTone(33, 0.6, 'sawtooth', 0.12), 280);
+    }
 
     // ==================== BACKGROUND MUSIC ====================
     let bgMusicTimer = null;
@@ -884,6 +898,20 @@
     let bossQuote = '', bossQuoteTimer = 0, bossQuoteShowTimer = 0;
     let missiles = [], bossProjectiles = [];
     let bossFlashTimer = 0;
+    let bossType = 'ratking'; // 'ratking' | 'freddie'
+
+    const FREDDIE_QUOTES = [
+      "I'll drown you in toxic waste, bin man!",
+      "Your wagon is SCRAP METAL!!",
+      "WAHAHAHAHA! Can't touch ME!",
+      "This is MY construction site!",
+      "I've buried better bin men than you!",
+      "Eat hazardous waste, lorry boy!!",
+      "You'll NEVER take me down! NEVER!",
+      "Dodge THIS, Barney boy!! HA!",
+      "I'll bury you so deep they'll need a JCB!!",
+      "These boots are STEEL-TOED, mate!",
+    ];
 
     // ==================== ENTITY SYSTEM ====================
     class Entity {
@@ -1483,6 +1511,8 @@
         bonusRound = (level === 4);
         if (level === 5 && bossPhase === 'none') {
           triggerBossLevel();
+        } else if (level === 3 && bossPhase === 'none') {
+          triggerFreddieLevel();
         } else if (level === 9) {
           speed = 14;
           sfxLevelUp();
@@ -1639,6 +1669,29 @@
       // music handled by game loop state change
     }
 
+    function triggerFreddieLevel() {
+      state = 'boss';
+      bossType = 'freddie';
+      bossPhase = 'intro';
+      bossIntroTimer = 420;   // 7-second dramatic multi-stage intro
+      bossHp = 6;
+      bossX = W - 90;
+      bossY = H / 2 + 10;
+      bossTargetY = H / 2 + 10;
+      bossMoveTimer = 0;
+      bossThrowTimer = 110;
+      bossAutoFireTimer = 99999; // no auto-fire for Freddie — player must fight back
+      bossFrame = 0;
+      bossQuote = '';
+      bossQuoteTimer = 280;
+      bossQuoteShowTimer = 0;
+      missiles = [];
+      bossProjectiles = [];
+      bossFlashTimer = 0;
+      obstacles = [];
+      collectibles = [];
+    }
+
     function fireMissile() {
       missiles.push({ x: 120, y: barneyY - 8, speed: 8 });
       sfxHonk();
@@ -1669,6 +1722,255 @@
       // sheen
       cx.fillStyle = 'rgba(255,255,255,0.15)';
       cx.beginPath(); cx.ellipse(x - 3, y - 4, 4, 6, -0.4, 0, Math.PI * 2); cx.fill();
+    }
+
+    // ── TOXIC BARREL (Freddie's weapon + player's counter-fire) ──────────────
+    function drawToxicBarrel(x, y) {
+      ctx.fillStyle = '#1B5E20'; ctx.fillRect(x - 13, y - 18, 26, 34);
+      // metal bands
+      ctx.fillStyle = '#546E7A'; ctx.fillRect(x - 14, y - 18, 28, 5);
+      ctx.fillStyle = '#607D8B'; ctx.fillRect(x - 14, y - 4,  28, 5);
+      ctx.fillStyle = '#546E7A'; ctx.fillRect(x - 14, y + 12, 28, 5);
+      // toxic goo contents
+      ctx.fillStyle = '#AEEA00'; ctx.fillRect(x - 9, y - 12, 18, 22);
+      // biohazard cross (pixel)
+      ctx.fillStyle = '#1B5E20';
+      ctx.fillRect(x - 6, y - 5, 12, 3); ctx.fillRect(x - 2, y - 9, 4, 10);
+      ctx.fillRect(x - 8, y - 3, 4, 3);  ctx.fillRect(x + 4, y - 3, 4, 3);
+      // drips
+      ctx.fillStyle = '#76FF03';
+      ctx.fillRect(x - 4, y + 15, 3, 8); ctx.fillRect(x + 3, y + 16, 2, 6);
+      // glow aura
+      ctx.fillStyle = 'rgba(174,234,0,0.18)';
+      ctx.fillRect(x - 18, y - 23, 36, 46);
+    }
+
+    // ── FREDDIE THE TOXIC FOREMAN boss sprite ────────────────────────────────
+    function drawFreddieBoss(bx, by, frame, flashT) {
+      const wh = flashT > 0;
+      const fc = col => { ctx.fillStyle = wh ? '#FFFFFF' : col; };
+
+      // === RED HARD HAT ===
+      fc('#D32F2F'); ctx.fillRect(bx - 36, by - 160, 72, 30);  // crown
+      fc('#C62828'); ctx.fillRect(bx - 44, by - 132, 88, 14);  // body
+      fc('#B71C1C'); ctx.fillRect(bx - 52, by - 120, 104, 9);  // brim
+      fc('#FF5252'); ctx.fillRect(bx - 6,  by - 168, 12, 10);  // top bump
+      // hat shadow line
+      ctx.fillStyle = wh ? '#FFFFFF' : 'rgba(0,0,0,0.18)';
+      ctx.fillRect(bx - 52, by - 120, 104, 4);
+
+      // === FACE (fat, angry) ===
+      fc('#FFCC99'); ctx.fillRect(bx - 38, by - 110, 76, 56);
+      fc('#FFCC99'); ctx.fillRect(bx - 42, by - 96,  84, 36);  // bulging cheeks
+      // red cheek tinge
+      ctx.fillStyle = wh ? '#FFFFFF' : 'rgba(170,40,40,0.22)';
+      ctx.fillRect(bx - 38, by - 86, 22, 18); ctx.fillRect(bx + 16, by - 86, 22, 18);
+
+      // ANGRY V-BROWS
+      fc('#1A1A1A');
+      ctx.fillRect(bx - 36, by - 108, 22, 7); ctx.fillRect(bx - 38, by - 113, 26, 7);
+      ctx.fillRect(bx + 14, by - 108, 22, 7); ctx.fillRect(bx + 12, by - 113, 26, 7);
+
+      // EVIL RED EYES
+      fc('#FFFFFF'); ctx.fillRect(bx - 32, by - 98, 18, 13); ctx.fillRect(bx + 14, by - 98, 18, 13);
+      fc('#C62828'); ctx.fillRect(bx - 28, by - 94, 10, 8);  ctx.fillRect(bx + 18, by - 94, 10, 8);
+      fc('#000000'); ctx.fillRect(bx - 26, by - 92, 6, 5);   ctx.fillRect(bx + 20, by - 92, 6, 5);
+      fc('#FFFFFF'); ctx.fillRect(bx - 26, by - 92, 2, 2);   ctx.fillRect(bx + 20, by - 92, 2, 2);
+
+      // VILLAIN MOUSTACHE — huge, curled ends
+      fc('#1A1A1A');
+      ctx.fillRect(bx - 32, by - 72, 64, 13);    // main bar
+      ctx.fillRect(bx - 48, by - 82, 18, 28);    // left curl
+      ctx.fillRect(bx + 30, by - 82, 18, 28);    // right curl
+      ctx.fillRect(bx - 60, by - 68, 16, 10);    // left tip in
+      ctx.fillRect(bx + 44, by - 68, 16, 10);    // right tip in
+      ctx.fillRect(bx - 64, by - 63, 12, 6);     // left tip end
+      ctx.fillRect(bx + 52, by - 63, 12, 6);     // right tip end
+
+      // CHIN (double chin, fat)
+      fc('#E0A070'); ctx.fillRect(bx - 34, by - 56, 68, 11);
+      fc('#FFCC99'); ctx.fillRect(bx - 32, by - 60, 64, 9);
+
+      // === MASSIVE APE ARMS ===
+      const sway = Math.sin(frame * 0.08) * 8;
+      const throwing = Math.floor(frame / 28) % 5 === 0;
+
+      // Left arm (huge, hanging)
+      fc('#D4A574'); ctx.fillRect(bx - 80, by - 48 + sway, 42, 28);
+      fc('#D4A574'); ctx.fillRect(bx - 86, by - 22 + sway, 40, 26);
+      fc('#FFCC99'); ctx.fillRect(bx - 90, by + 2 + sway, 36, 28);
+      fc('#CC9966'); // knuckles
+      for (let k = 0; k < 4; k++) ctx.fillRect(bx - 86 + k * 9, by + 4 + sway, 6, 20);
+
+      // Right arm (throw vs rest)
+      if (throwing) {
+        fc('#D4A574'); ctx.fillRect(bx + 38, by - 112, 40, 26);
+        fc('#D4A574'); ctx.fillRect(bx + 56, by - 90,  36, 24);
+        fc('#FFCC99'); ctx.fillRect(bx + 62, by - 70,  32, 26);
+      } else {
+        fc('#D4A574'); ctx.fillRect(bx + 38, by - 48 - sway, 42, 28);
+        fc('#D4A574'); ctx.fillRect(bx + 44, by - 22 - sway, 40, 26);
+        fc('#FFCC99'); ctx.fillRect(bx + 50, by + 2 - sway, 36, 28);
+      }
+
+      // === DIRTY WHITE VEST (belly prominent!) ===
+      fc('#F5F5F5'); ctx.fillRect(bx - 36, by - 48, 72, 54);
+      fc('#EAEAE0'); ctx.fillRect(bx - 34, by - 46, 68, 50);
+      fc('#DCDCCC'); // seams
+      ctx.fillRect(bx - 4,  by - 44, 8, 46);
+      ctx.fillRect(bx - 30, by - 34, 26, 4); ctx.fillRect(bx + 4, by - 34, 26, 4);
+      // dirt & grease stains
+      fc('#BBBB9A'); ctx.fillRect(bx - 24, by - 30, 11, 8);
+      fc('#AAAA8A'); ctx.fillRect(bx + 8,  by - 14, 9, 11);
+      fc('#999977'); ctx.fillRect(bx - 12, by + 4,  7, 8);
+
+      // BELLY bulging below vest
+      fc('#FFCC99'); ctx.fillRect(bx - 44, by + 4,  88, 20);
+      fc('#FFCC99'); ctx.fillRect(bx - 48, by + 10, 96, 14);
+      fc('#E0A070'); ctx.fillRect(bx - 3,  by + 12, 9, 6); // navel
+
+      // === BELT + GOLD BUCKLE ===
+      fc('#5D4037'); ctx.fillRect(bx - 44, by + 22, 88, 10);
+      fc('#FFD700'); ctx.fillRect(bx - 13, by + 18, 26, 18);
+      fc('#FFA000'); ctx.fillRect(bx - 9,  by + 21, 18, 11);
+      fc('#1A1A1A'); ctx.fillRect(bx - 3,  by + 24, 6, 6);
+
+      // === JEANS (blue) ===
+      fc('#1565C0'); ctx.fillRect(bx - 44, by + 30, 88, 64);
+      fc('#0D47A1'); ctx.fillRect(bx - 40, by + 34, 36, 56);
+      fc('#0D47A1'); ctx.fillRect(bx + 4,  by + 34, 36, 56);
+      fc('#1976D2'); ctx.fillRect(bx - 5,  by + 34, 10, 56);
+      fc('#0D47A1');
+      ctx.fillRect(bx - 40, by + 50, 36, 4); ctx.fillRect(bx + 4, by + 50, 36, 4);
+
+      // === HEAVY STEEL-TOED BOOTS ===
+      fc('#3E2723'); ctx.fillRect(bx - 44, by + 90, 38, 18); ctx.fillRect(bx + 6, by + 90, 38, 18);
+      fc('#2E1B18'); ctx.fillRect(bx - 50, by + 97, 44, 12); ctx.fillRect(bx + 6, by + 97, 44, 12);
+      fc('#5D4037'); ctx.fillRect(bx - 42, by + 92, 30, 5);  ctx.fillRect(bx + 8, by + 92, 30, 5);
+      // boot stitching
+      fc('#4E342E');
+      for (let s = 0; s < 5; s++) {
+        ctx.fillRect(bx - 46 + s * 8, by + 100, 5, 2);
+        ctx.fillRect(bx + 6  + s * 8, by + 100, 5, 2);
+      }
+
+      // === BOSS HP BAR ===
+      const barW = 140, barH = 13, barX = bx - 70, barY = by - 192;
+      ctx.fillStyle = '#111'; ctx.fillRect(barX - 3, barY - 3, barW + 6, barH + 6);
+      ctx.fillStyle = '#4A0000'; ctx.fillRect(barX, barY, barW, barH);
+      const hpRatio = bossHp / 6;
+      ctx.fillStyle = hpRatio <= 0.33 ? '#FF1744' : hpRatio <= 0.66 ? '#FF6F00' : '#FF8F00';
+      ctx.fillRect(barX, barY, Math.round(barW * hpRatio), barH);
+      ctx.fillStyle = '#222';
+      for (let i = 1; i < 6; i++) ctx.fillRect(barX + Math.round(barW / 6 * i) - 1, barY, 2, barH);
+      ctx.fillStyle = '#FFF'; ctx.font = 'bold 11px Courier New';
+      ctx.textAlign = 'center'; ctx.fillText('FREDDIE HP', bx, barY - 5);
+      ctx.textAlign = 'left';
+    }
+
+    // ── FREDDIE INTRO — 7-second multi-stage dramatic sequence ──────────────
+    function drawFreddieIntro() {
+      const t = bossIntroTimer;
+      // Progressive darkness
+      const darken = Math.min(0.93, (420 - Math.max(0, t)) / 55 * 0.93);
+      ctx.fillStyle = `rgba(0,0,0,${darken})`; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+
+      // ── Stage 0: Warning flicker (420 → 360) ──
+      if (t > 360) {
+        ctx.globalAlpha = Math.min(1, (420 - t) / 22);
+        if (Math.floor(frameCount / 7) % 2 === 0) {
+          ctx.fillStyle = '#FF8F00'; ctx.font = 'bold 26px Courier New';
+          ctx.fillText('WARNING: CONSTRUCTION ZONE AHEAD', W / 2, H / 2 - 12);
+        }
+        ctx.fillStyle = '#FFD700'; ctx.font = '15px Courier New';
+        ctx.fillText('HAZARDOUS AREA — AUTHORISED PERSONNEL ONLY', W / 2, H / 2 + 22);
+        ctx.globalAlpha = 1; ctx.textAlign = 'left'; return;
+      }
+
+      // ── Stage 1: Toxic hazard pulse (360 → 300) ──
+      if (t > 300) {
+        const pulse = 0.55 + 0.45 * Math.sin(frameCount * 0.28);
+        ctx.fillStyle = `rgba(100,255,0,${pulse * 0.13})`; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#76FF03'; ctx.font = 'bold 23px Courier New';
+        ctx.fillText('TOXIC HAZARD DETECTED', W / 2, H / 2 - 18);
+        ctx.fillStyle = '#AEEA00'; ctx.font = '15px Courier New';
+        ctx.fillText('Large hostile entity approaching construction site...', W / 2, H / 2 + 18);
+        ctx.textAlign = 'left'; return;
+      }
+
+      // ── Stage 2: NAME SLAM with sfx (300 → 240) ──
+      if (t > 240) {
+        if (t > 294) { // entry flash + slam SFX once
+          const fl = (t - 294) / 6;
+          ctx.fillStyle = `rgba(255,70,0,${fl * 0.85})`; ctx.fillRect(0, 0, W, H);
+          if (t >= 298 && t < 300) sfxNameSlam();
+        }
+        const progress = Math.min(1, (300 - t) / 32);
+        const sc = 0.5 + progress * 0.5;
+        ctx.save(); ctx.translate(W / 2, H / 2 - 20); ctx.scale(sc, sc);
+        ctx.fillStyle = '#FF3D00'; ctx.font = 'bold 44px Courier New'; ctx.fillText('FREDDIE THE', 0, -32);
+        ctx.fillStyle = '#FF6D00'; ctx.font = 'bold 54px Courier New'; ctx.fillText('TOXIC FOREMAN!', 0, 30);
+        ctx.restore();
+        ctx.fillStyle = '#FF5252'; ctx.font = 'bold 14px Courier New';
+        ctx.fillText('— BOSS INCOMING —', W / 2, H / 2 + 72);
+        ctx.fillStyle = '#FFD700'; ctx.font = '12px Courier New';
+        ctx.fillText('DODGE barrels with  UP DOWN  |  FIRE BACK with  SPACE', W / 2, H / 2 + 96);
+        ctx.textAlign = 'left'; return;
+      }
+
+      // ── Dialogue box helper ──
+      function dlgBox(isFreddie, lines) {
+        ctx.save();
+        const bx = 50, by = H - 168, bw = 700, bh = 140;
+        ctx.fillStyle = isFreddie ? 'rgba(26,0,0,0.97)' : 'rgba(0,12,32,0.97)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.strokeStyle = isFreddie ? '#FF3D00' : '#FFD700';
+        ctx.lineWidth = 3; ctx.strokeRect(bx, by, bw, bh);
+        ctx.fillStyle = isFreddie ? '#FF3D00' : '#FFD700';
+        ctx.fillRect(bx, by, bw, 5);
+        ctx.textAlign = 'left';
+        ctx.fillStyle = isFreddie ? '#FF6D00' : '#FFD700';
+        ctx.font = 'bold 15px Courier New';
+        ctx.fillText(isFreddie ? 'FREDDIE THE TOXIC FOREMAN:' : 'BARNEY:', bx + 16, by + 28);
+        ctx.fillStyle = '#FFFFFF'; ctx.font = '14px Courier New';
+        lines.forEach((l, i) => ctx.fillText(l, bx + 16, by + 60 + i * 28));
+        ctx.restore(); ctx.textAlign = 'center';
+      }
+
+      // ── Stage 3: Freddie threat 1 (240 → 180) ──
+      if (t > 180) {
+        ctx.save(); drawFreddieBoss(bossX, bossY, frameCount * 0.35, 0); ctx.restore();
+        dlgBox(true, [
+          "\"You think YOUR lot can clean up MY construction site?! HA!\"",
+          "\"I've buried better bin men than you, mate. WAHAHAHAHA!!\"",
+        ]); ctx.textAlign = 'left'; return;
+      }
+
+      // ── Stage 4: Freddie threat 2 (180 → 120) ──
+      if (t > 120) {
+        ctx.save(); drawFreddieBoss(bossX, bossY, frameCount * 0.35, 0); ctx.restore();
+        dlgBox(true, [
+          "\"I'll BURY you in toxic waste, bin man!\"",
+          "\"These barrels'll flatten ya good and proper! You're RUBBISH!!\"",
+        ]); ctx.textAlign = 'left'; return;
+      }
+
+      // ── Stage 5: Barney responds (120 → 60) ──
+      if (t > 60) {
+        ctx.save(); drawSprite(S_BARNEY_FACE, 62, H - 246, 2.4); ctx.restore();
+        dlgBox(false, [
+          "\"Right mate... Health and Safety says this site needs a PROPER clear-up!\"",
+          "\"...and I've got a fresh brew waiting for after.  HONK HONK!\"",
+        ]); ctx.textAlign = 'left'; return;
+      }
+
+      // ── Stage 6: FIGHT! (60 → 0) ──
+      const fp = 0.84 + 0.16 * Math.sin(frameCount * 0.38);
+      ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(fp, fp);
+      ctx.fillStyle = '#FF1744'; ctx.font = 'bold 80px Courier New';
+      ctx.fillText('FIGHT!', 0, 24);
+      ctx.restore(); ctx.textAlign = 'left';
     }
 
     function drawRatKingBoss(bx, by, frame, flashTimer) {
@@ -1803,16 +2105,24 @@
       if (bossPhase === 'defeated') {
         bossDefeatTimer -= dt;
         if (bossDefeatTimer <= 0) {
-          // Resume normal play at level 5
-          state = 'playing';
-          bossPhase = 'none';
-          level = 5;
-          frameCount = level * 1800; // so level calc stays correct
-          speed = Math.min(12, 5.0 + (level - 1) * 0.9);
-          bonusRound = false;
-          obstacles = []; collectibles = [];
-          missiles = []; bossProjectiles = [];
-          spawnScorePopup(W / 2 - 60, H / 2, 'LEVEL 5! FASTER!', COL.uiGold);
+          if (bossType === 'freddie') {
+            // Freddie defeated → reward with Bonus Round at level 4
+            state = 'playing'; bossPhase = 'none'; bossType = 'ratking';
+            level = 4; frameCount = level * 1800;
+            speed = Math.min(12, 5.0 + (level - 1) * 0.9);
+            bonusRound = true; hyperSpeedAwarded = false;
+            obstacles = []; collectibles = []; missiles = []; bossProjectiles = [];
+            spawnScorePopup(W / 2 - 80, H / 2 - 14, 'BONUS ROUND!', '#FFD700');
+            spawnScorePopup(W / 2 - 80, H / 2 + 14, 'COLLECT EVERYTHING!', '#80CBC4');
+          } else {
+            // Rat King defeated → resume normal play at level 5
+            state = 'playing'; bossPhase = 'none';
+            level = 5; frameCount = level * 1800;
+            speed = Math.min(12, 5.0 + (level - 1) * 0.9);
+            bonusRound = false;
+            obstacles = []; collectibles = []; missiles = []; bossProjectiles = [];
+            spawnScorePopup(W / 2 - 60, H / 2, 'LEVEL 5! FASTER!', COL.uiGold);
+          }
         }
         return;
       }
@@ -1827,7 +2137,7 @@
       }
       bossY += (bossTargetY - bossY) * (1 - Math.pow(0.96, dt));
 
-      // Boss throws rubbish at player
+      // Boss throws projectile at player
       bossThrowTimer -= dt;
       if (bossThrowTimer <= 0) {
         bossThrowTimer = 80 + Math.random() * 60;
@@ -1837,6 +2147,7 @@
         const spd = 5;
         const dist = Math.sqrt(dx * dx + dy * dy);
         bossProjectiles.push({ x: bossX - 60, y: bossY, vx: dx / dist * spd, vy: dy / dist * spd });
+        if (bossType === 'freddie') sfxBarrelThrow();
       }
 
       // Auto-fire missiles every 2.5 seconds (so boss isn't too easy)
@@ -1855,11 +2166,13 @@
       bossProjectiles = bossProjectiles.filter(p => p.x > -40 && p.y > -40 && p.y < H + 40);
 
       // Missile hits boss
+      const bossHitRadius = bossType === 'freddie' ? 90 : 45;
       missiles.forEach(m => {
-        if (m.x > bossX - 70 && m.x < bossX + 20 && Math.abs(m.y - bossY) < 45) {
+        if (m.x > bossX - 70 && m.x < bossX + 20 && Math.abs(m.y - bossY) < bossHitRadius) {
           m.x = W + 100; // remove
           bossHp--;
           bossFlashTimer = 18;
+          if (bossType === 'freddie') sfxFreddieHit();
           spawnCollectEffect(bossX - 30, bossY, '#FFD700');
           if (bossHp <= 0) {
             bossPhase = 'defeated';
@@ -1894,7 +2207,8 @@
       // Speech bubble — show a quote every 5-8 seconds
       bossQuoteTimer -= dt;
       if (bossQuoteTimer <= 0) {
-        bossQuote = VILLAIN_QUOTES[Math.floor(Math.random() * VILLAIN_QUOTES.length)];
+        const qPool = bossType === 'freddie' ? FREDDIE_QUOTES : VILLAIN_QUOTES;
+        bossQuote = qPool[Math.floor(Math.random() * qPool.length)];
         bossQuoteShowTimer = 180;
         bossQuoteTimer = 300 + Math.random() * 180;
       }
@@ -1925,29 +2239,41 @@
       drawRoad();
 
       if (bossPhase === 'intro') {
-        // Full-screen intro overlay
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, W, H);
-        const pulse = 0.85 + 0.15 * Math.sin(frameCount * 0.12);
-        ctx.save(); ctx.translate(W / 2, H / 2 - 30); ctx.scale(pulse, pulse);
-        ctx.fillStyle = '#FF1744'; ctx.font = 'bold 36px Courier New'; ctx.textAlign = 'center';
-        ctx.fillText('⚠  THE RAT KING', 0, -10);
-        ctx.fillText('APPROACHES...  ⚠', 0, 30);
-        ctx.fillStyle = '#FFD700'; ctx.font = 'bold 16px Courier New';
-        ctx.fillText('Arm your detergent missiles!', 0, 70);
-        ctx.fillText('[SPACE / HONK] to fire', 0, 92);
-        ctx.restore();
-        ctx.textAlign = 'left';
+        if (bossType === 'freddie') {
+          drawFreddieIntro();
+        } else {
+          // Rat King intro
+          ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, W, H);
+          const pulse = 0.85 + 0.15 * Math.sin(frameCount * 0.12);
+          ctx.save(); ctx.translate(W / 2, H / 2 - 30); ctx.scale(pulse, pulse);
+          ctx.fillStyle = '#FF1744'; ctx.font = 'bold 36px Courier New'; ctx.textAlign = 'center';
+          ctx.fillText('⚠  THE RAT KING', 0, -10);
+          ctx.fillText('APPROACHES...  ⚠', 0, 30);
+          ctx.fillStyle = '#FFD700'; ctx.font = 'bold 16px Courier New';
+          ctx.fillText('Arm your detergent missiles!', 0, 70);
+          ctx.fillText('[SPACE / HONK] to fire', 0, 92);
+          ctx.restore();
+          ctx.textAlign = 'left';
+        }
         return;
       }
 
       // Draw missile(s)
       missiles.forEach(m => drawDetergentMissile(m.x, m.y));
 
-      // Draw rubbish projectiles
-      bossProjectiles.forEach(p => drawRubbishProjectile(p.x, p.y));
+      // Draw projectiles — barrels for Freddie, rubbish for Rat King
+      if (bossType === 'freddie') {
+        bossProjectiles.forEach(p => drawToxicBarrel(p.x, p.y));
+      } else {
+        bossProjectiles.forEach(p => drawRubbishProjectile(p.x, p.y));
+      }
 
-      // Draw the Rat King Boss
-      drawRatKingBoss(bossX, bossY, bossFrame, bossFlashTimer);
+      // Draw the boss
+      if (bossType === 'freddie') {
+        drawFreddieBoss(bossX, bossY, bossFrame, bossFlashTimer);
+      } else {
+        drawRatKingBoss(bossX, bossY, bossFrame, bossFlashTimer);
+      }
 
       // Speech bubble
       if (bossQuoteShowTimer > 0 && bossQuote) {
@@ -1965,11 +2291,19 @@
       if (bossPhase === 'defeated') {
         ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = '#FFD700'; ctx.font = 'bold 32px Courier New'; ctx.textAlign = 'center';
-        ctx.fillText('THE RAT KING IS DEFEATED!', W / 2, H / 2 - 20);
-        ctx.fillStyle = '#FF69B4'; ctx.font = 'bold 18px Courier New';
-        ctx.fillText('+500 BONUS POINTS!', W / 2, H / 2 + 20);
-        ctx.fillStyle = '#80CBC4'; ctx.font = '14px Courier New';
-        ctx.fillText('Resuming normal run...', W / 2, H / 2 + 50);
+        if (bossType === 'freddie') {
+          ctx.fillText('FREDDIE IS DEFEATED!', W / 2, H / 2 - 20);
+          ctx.fillStyle = '#FF69B4'; ctx.font = 'bold 18px Courier New';
+          ctx.fillText('+500 BONUS POINTS!', W / 2, H / 2 + 20);
+          ctx.fillStyle = '#80CBC4'; ctx.font = '14px Courier New';
+          ctx.fillText('BONUS ROUND INCOMING!', W / 2, H / 2 + 50);
+        } else {
+          ctx.fillText('THE RAT KING IS DEFEATED!', W / 2, H / 2 - 20);
+          ctx.fillStyle = '#FF69B4'; ctx.font = 'bold 18px Courier New';
+          ctx.fillText('+500 BONUS POINTS!', W / 2, H / 2 + 20);
+          ctx.fillStyle = '#80CBC4'; ctx.font = '14px Courier New';
+          ctx.fillText('Resuming normal run...', W / 2, H / 2 + 50);
+        }
         ctx.textAlign = 'left';
       }
     }
@@ -1984,7 +2318,7 @@
       barneyLane = 1; barneyTargetLane = 1; barneyY = LANE_Y[1];
       obstacles = []; collectibles = []; particles = []; scorePopups = [];
       missiles = []; bossProjectiles = [];
-      bossPhase = 'none'; bossHp = 6; bossFlashTimer = 0; bossQuote = ''; bossQuoteTimer = 0; bossQuoteShowTimer = 0;
+      bossPhase = 'none'; bossType = 'ratking'; bossHp = 6; bossFlashTimer = 0; bossQuote = ''; bossQuoteTimer = 0; bossQuoteShowTimer = 0;
       nextSpawn = 80; invTimer = 0; flashTimer = 0; wagonBounce = 0;
       barneyFace = 'normal'; barneyFaceTimer = 0; blinkTimer = 200;
       frameCount = 0; roadScroll = 0;
