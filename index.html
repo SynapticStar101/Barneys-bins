@@ -1509,10 +1509,10 @@
       if (newLevel > level) {
         level = newLevel;
         bonusRound = (level === 4);
-        if (level === 6 && bossPhase === 'none') {
-          triggerBossLevel();
-        } else if (level === 3 && bossPhase === 'none') {
+        if (level === 3 && bossPhase === 'none') {
           triggerFreddieLevel();
+        } else if (level === 6 && bossPhase === 'none') {
+          triggerBossLevel();
         } else if (level === 8) {
           speed = 14;
           sfxLevelUp();
@@ -1673,7 +1673,7 @@
       state = 'boss';
       bossType = 'freddie';
       bossPhase = 'intro';
-      bossIntroTimer = 420;   // 7-second dramatic multi-stage intro
+      bossIntroTimer = 780;   // 13-second dramatic multi-stage intro
       bossHp = 6;
       bossX = W - 90;
       bossY = H / 2 + 10;
@@ -1879,13 +1879,13 @@
     function drawFreddieIntro() {
       const t = bossIntroTimer;
       // Progressive darkness
-      const darken = Math.min(0.93, (420 - Math.max(0, t)) / 55 * 0.93);
+      const darken = Math.min(0.93, (780 - Math.max(0, t)) / 55 * 0.93);
       ctx.fillStyle = `rgba(0,0,0,${darken})`; ctx.fillRect(0, 0, W, H);
       ctx.textAlign = 'center';
 
-      // ── Stage 0: Warning flicker (420 → 360) ──
-      if (t > 360) {
-        ctx.globalAlpha = Math.min(1, (420 - t) / 22);
+      // ── Stage 0: Warning flicker (780 → 720) ──
+      if (t > 720) {
+        ctx.globalAlpha = Math.min(1, (780 - t) / 22);
         if (Math.floor(frameCount / 7) % 2 === 0) {
           ctx.fillStyle = '#FF8F00'; ctx.font = 'bold 26px Courier New';
           ctx.fillText('WARNING: CONSTRUCTION ZONE AHEAD', W / 2, H / 2 - 12);
@@ -1895,8 +1895,8 @@
         ctx.globalAlpha = 1; ctx.textAlign = 'left'; return;
       }
 
-      // ── Stage 1: Toxic hazard pulse (360 → 300) ──
-      if (t > 300) {
+      // ── Stage 1: Toxic hazard pulse (720 → 660) ──
+      if (t > 660) {
         const pulse = 0.55 + 0.45 * Math.sin(frameCount * 0.28);
         ctx.fillStyle = `rgba(100,255,0,${pulse * 0.13})`; ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = '#76FF03'; ctx.font = 'bold 23px Courier New';
@@ -1906,14 +1906,14 @@
         ctx.textAlign = 'left'; return;
       }
 
-      // ── Stage 2: NAME SLAM with sfx (300 → 240) ──
-      if (t > 240) {
-        if (t > 294) { // entry flash + slam SFX once
-          const fl = (t - 294) / 6;
+      // ── Stage 2: NAME SLAM with sfx (660 → 600) ──
+      if (t > 600) {
+        if (t > 654) { // entry flash + slam SFX once
+          const fl = (t - 654) / 6;
           ctx.fillStyle = `rgba(255,70,0,${fl * 0.85})`; ctx.fillRect(0, 0, W, H);
-          if (t >= 298 && t < 300) sfxNameSlam();
+          if (t >= 658 && t < 660) sfxNameSlam();
         }
-        const progress = Math.min(1, (300 - t) / 32);
+        const progress = Math.min(1, (660 - t) / 32);
         const sc = 0.5 + progress * 0.5;
         ctx.save(); ctx.translate(W / 2, H / 2 - 20); ctx.scale(sc, sc);
         ctx.fillStyle = '#FF3D00'; ctx.font = 'bold 44px Courier New'; ctx.fillText('FREDDIE THE', 0, -32);
@@ -1945,8 +1945,8 @@
         ctx.restore(); ctx.textAlign = 'center';
       }
 
-      // ── Stage 3: Freddie threat 1 (240 → 180) ──
-      if (t > 180) {
+      // ── Stage 3: Freddie threat 1 (600 → 420) — 3 seconds ──
+      if (t > 420) {
         ctx.save(); drawFreddieBoss(bossX, bossY, frameCount * 0.35, 0); ctx.restore();
         dlgBox(true, [
           "\"You think YOUR lot can clean up MY construction site?! HA!\"",
@@ -1954,8 +1954,8 @@
         ]); ctx.textAlign = 'left'; return;
       }
 
-      // ── Stage 4: Freddie threat 2 (180 → 120) ──
-      if (t > 120) {
+      // ── Stage 4: Freddie threat 2 (420 → 240) — 3 seconds ──
+      if (t > 240) {
         ctx.save(); drawFreddieBoss(bossX, bossY, frameCount * 0.35, 0); ctx.restore();
         dlgBox(true, [
           "\"I'll BURY you in toxic waste, bin man!\"",
@@ -1963,8 +1963,8 @@
         ]); ctx.textAlign = 'left'; return;
       }
 
-      // ── Stage 5: Barney responds (120 → 60) ──
-      if (t > 60) {
+      // ── Stage 5: Barney responds (240 → 90) — 2.5 seconds ──
+      if (t > 90) {
         ctx.save(); drawSprite(S_BARNEY_FACE, 62, H - 246, 2.4); ctx.restore();
         dlgBox(false, [
           "\"Right mate... Health and Safety says this site needs a PROPER clear-up!\"",
@@ -1972,7 +1972,7 @@
         ]); ctx.textAlign = 'left'; return;
       }
 
-      // ── Stage 6: FIGHT! (60 → 0) ──
+      // ── Stage 6: FIGHT! (90 → 0) ──
       const fp = 0.84 + 0.16 * Math.sin(frameCount * 0.38);
       ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(fp, fp);
       ctx.fillStyle = '#FF1744'; ctx.font = 'bold 80px Courier New';
@@ -2216,10 +2216,10 @@
         });
       }
 
-      // Boss projectile hits wagon
+      // Boss projectile hits wagon — use same x range as normal obstacle collision
       if (invTimer <= 0) {
         bossProjectiles.forEach(p => {
-          if (Math.abs(p.x - 80) < 36 && Math.abs(p.y - barneyY) < 34) {
+          if (p.x > WAGON_X - 95 && p.x < WAGON_X + 75 && Math.abs(p.y - barneyY) < 38) {
             p.x = -100; // remove
             lives--;
             invTimer = 90;
